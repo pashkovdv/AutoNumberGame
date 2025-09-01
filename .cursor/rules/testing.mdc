@@ -1,0 +1,420 @@
+# AutoNumberGame - Стратегия тестирования
+
+## Обзор тестирования
+
+AutoNumberGame использует комплексный подход к тестированию с использованием Vitest, обеспечивая высокое качество кода и надежность системы.
+
+## Тестовая инфраструктура
+
+### Тестовый фреймворк
+
+#### Vitest
+- **Версия**: ^1.6.1
+- **Покрытие**: @vitest/coverage-v8
+- **Конфигурация**: `vitest.config.js`
+
+#### Конфигурация Vitest
+```javascript
+import { defineConfig } from 'vitest/config';
+
+export default defineConfig({
+  test: {
+    environment: 'node',
+    globals: true,
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json', 'html'],
+      exclude: [
+        'node_modules/',
+        'src/**/*.test.js'
+      ],
+      thresholds: {
+        global: {
+          branches: 80,
+          functions: 80,
+          lines: 80,
+          statements: 80
+        }
+      }
+    }
+  }
+});
+```
+
+### Структура тестов
+
+```
+src/
+├── bot/
+│   ├── telegramBot.js
+│   └── telegramBot.test.js
+├── game/
+│   ├── gameLogic.js
+│   └── gameLogic.test.js
+├── storage/
+│   ├── gameStorage.js
+│   └── gameStorage.test.js
+└── index.js
+    └── index.test.js
+```
+
+## Стратегии тестирования
+
+### 1. Модульное тестирование (Unit Tests)
+
+#### Принципы
+- Тестирование каждого модуля изолированно
+- Использование моков для внешних зависимостей
+- Покрытие всех путей выполнения
+- Быстрое выполнение тестов
+
+#### Примеры тестов
+
+##### GameStorage тесты
+```javascript
+describe('GameStorage', () => {
+  describe('addNumber', () => {
+    test('should add new number successfully', async () => {
+      const storage = new GameStorage();
+      await storage.initialize();
+      
+      const result = await storage.addNumber('001', 123, 'TestUser');
+      
+      expect(result).toBe(true);
+      expect(await storage.hasNumber('001')).toBe(true);
+    });
+
+    test('should reject duplicate number', async () => {
+      const storage = new GameStorage();
+      await storage.initialize();
+      
+      await storage.addNumber('001', 123, 'TestUser');
+      const result = await storage.addNumber('001', 456, 'AnotherUser');
+      
+      expect(result).toBe(false);
+    });
+  });
+});
+```
+
+##### GameLogic тесты
+```javascript
+describe('GameLogic', () => {
+  describe('validateNumber', () => {
+    test('should validate correct 3-digit number', () => {
+      const logic = new GameLogic();
+      
+      const result = logic.validateNumber('123');
+      
+      expect(result.isValid).toBe(true);
+      expect(result.normalizedNumber).toBe('123');
+    });
+
+    test('should reject non-3-digit number', () => {
+      const logic = new GameLogic();
+      
+      const result = logic.validateNumber('12');
+      
+      expect(result.isValid).toBe(false);
+      expect(result.error).toContain('3 цифры');
+    });
+  });
+});
+```
+
+### 2. Интеграционное тестирование
+
+#### Принципы
+- Тестирование взаимодействия между модулями
+- Проверка реальных сценариев использования
+- Тестирование с реальными данными
+
+#### Пример интеграционного теста
+```javascript
+describe('Game Integration', () => {
+  test('should process complete game flow', async () => {
+    const storage = new GameStorage();
+    const logic = new GameLogic();
+    const bot = new TelegramGameBot();
+    
+    await storage.initialize();
+    
+    // Симулируем игровой процесс
+    const response1 = await logic.processMessage('001', 123, 'User1');
+    expect(response1.isNewNumber).toBe(true);
+    
+    const response2 = await logic.processMessage('001', 456, 'User2');
+    expect(response2.isNewNumber).toBe(false);
+    
+    const stats = await storage.getStats();
+    expect(stats.foundNumbers).toBe(1);
+  });
+});
+```
+
+### 3. Мокирование и стабы
+
+#### Принципы мокирования
+- Мокирование внешних API (Telegram Bot API)
+- Мокирование файловой системы
+- Мокирование временных функций
+
+#### Примеры моков
+
+##### Telegram Bot API мок
+```javascript
+vi.mock('node-telegram-bot-api', () => {
+  return {
+    default: vi.fn().mockImplementation(() => ({
+      on: vi.fn(),
+      start: vi.fn(),
+      stop: vi.fn(),
+      sendMessage: vi.fn().mockResolvedValue({}),
+      getMe: vi.fn().mockResolvedValue({ username: 'testbot' })
+    }))
+  };
+});
+```
+
+##### File System мок
+```javascript
+vi.mock('fs/promises', () => ({
+  readFile: vi.fn(),
+  writeFile: vi.fn(),
+  mkdir: vi.fn(),
+  access: vi.fn()
+}));
+```
+
+### 4. Тестирование асинхронного кода
+
+#### Принципы
+- Использование `async/await` в тестах
+- Правильная обработка промисов
+- Тестирование ошибок и исключений
+
+#### Примеры
+```javascript
+test('should handle async operations correctly', async () => {
+  const storage = new GameStorage();
+  
+  // Тестируем асинхронную инициализацию
+  await expect(storage.initialize()).resolves.not.toThrow();
+  
+  // Тестируем асинхронное добавление
+  const result = await storage.addNumber('001', 123, 'User');
+  expect(result).toBe(true);
+});
+```
+
+## Покрытие тестами
+
+### Цели покрытия
+- **Строки**: >= 80%
+- **Функции**: >= 80%
+- **Ветви**: >= 80%
+- **Операторы**: >= 80%
+
+### Отчеты о покрытии
+```bash
+# Запуск тестов с покрытием
+npm run test:coverage
+
+# Просмотр HTML отчета
+open coverage/index.html
+```
+
+### Анализ покрытия
+```bash
+# Детальный отчет в консоли
+npm run test:coverage -- --reporter=text
+
+# JSON отчет для CI/CD
+npm run test:coverage -- --reporter=json
+```
+
+## Тестирование производительности
+
+### Нагрузочное тестирование
+```javascript
+describe('Performance Tests', () => {
+  test('should handle multiple concurrent requests', async () => {
+    const storage = new GameStorage();
+    await storage.initialize();
+    
+    const promises = [];
+    for (let i = 0; i < 100; i++) {
+      const number = i.toString().padStart(3, '0');
+      promises.push(storage.addNumber(number, i, `User${i}`));
+    }
+    
+    const start = Date.now();
+    await Promise.all(promises);
+    const duration = Date.now() - start;
+    
+    expect(duration).toBeLessThan(5000); // 5 секунд
+  });
+});
+```
+
+### Тестирование памяти
+```javascript
+test('should not have memory leaks', async () => {
+  const initialMemory = process.memoryUsage().heapUsed;
+  
+  for (let i = 0; i < 1000; i++) {
+    const storage = new GameStorage();
+    await storage.initialize();
+    await storage.addNumber('001', i, `User${i}`);
+  }
+  
+  const finalMemory = process.memoryUsage().heapUsed;
+  const memoryIncrease = finalMemory - initialMemory;
+  
+  // Увеличение памяти не должно превышать 10MB
+  expect(memoryIncrease).toBeLessThan(10 * 1024 * 1024);
+});
+```
+
+## Тестирование безопасности
+
+### Валидация входных данных
+```javascript
+describe('Security Tests', () => {
+  test('should reject malicious input', () => {
+    const logic = new GameLogic();
+    
+    const maliciousInputs = [
+      '001<script>alert("xss")</script>',
+      '001; DROP TABLE users;',
+      '001\nconsole.log("injection")',
+      '001' + 'A'.repeat(1000) // Очень длинный ввод
+    ];
+    
+    maliciousInputs.forEach(input => {
+      const result = logic.validateNumber(input);
+      expect(result.isValid).toBe(false);
+    });
+  });
+});
+```
+
+### Тестирование авторизации
+```javascript
+test('should restrict admin commands', async () => {
+  const bot = new TelegramGameBot();
+  
+  // Симулируем обычного пользователя
+  const regularUser = { id: 123, username: 'user' };
+  
+  // Попытка выполнить админскую команду
+  const response = await bot.handleCommand('/reset', regularUser);
+  
+  expect(response).toContain('доступ запрещен');
+});
+```
+
+## CI/CD интеграция
+
+### GitHub Actions
+```yaml
+- name: Run tests with coverage
+  run: npm run test:coverage
+
+- name: Check coverage thresholds
+  run: |
+    npm run test:coverage -- --reporter=json
+    node -e "
+      const coverage = require('./coverage/coverage-final.json');
+      const total = Object.values(coverage).reduce((acc, file) => {
+        Object.values(file.s).forEach(line => {
+          if (line !== undefined) acc.total++;
+          if (line > 0) acc.covered++;
+        });
+        return acc;
+      }, {total: 0, covered: 0});
+      
+      const percentage = (total.covered / total.total) * 100;
+      if (percentage < 80) {
+        console.error('Coverage below 80%:', percentage.toFixed(2) + '%');
+        process.exit(1);
+      }
+      console.log('Coverage:', percentage.toFixed(2) + '%');
+    "
+```
+
+### Pre-commit hooks
+```json
+{
+  "husky": {
+    "hooks": {
+      "pre-commit": "npm run test && npm run lint",
+      "pre-push": "npm run test:coverage"
+    }
+  }
+}
+```
+
+## Отладка тестов
+
+### Логирование в тестах
+```javascript
+// Включение детального логирования для отладки
+beforeEach(() => {
+  vi.spyOn(console, 'log').mockImplementation(() => {});
+  vi.spyOn(console, 'error').mockImplementation(() => {});
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+```
+
+### Изоляция тестов
+```javascript
+describe('Isolated Tests', () => {
+  let storage;
+  
+  beforeEach(async () => {
+    storage = new GameStorage();
+    await storage.initialize();
+  });
+  
+  afterEach(async () => {
+    await storage.resetGame();
+  });
+  
+  // Тесты здесь изолированы
+});
+```
+
+## Лучшие практики
+
+### 1. Наименование тестов
+- Описательные названия на русском языке
+- Использование паттерна "should do something when condition"
+- Группировка связанных тестов
+
+### 2. Структура тестов
+- Arrange (подготовка)
+- Act (действие)
+- Assert (проверка)
+
+### 3. Мокирование
+- Мокируем только внешние зависимости
+- Используем реалистичные данные
+- Восстанавливаем моки после каждого теста
+
+### 4. Асинхронность
+- Всегда используем `async/await`
+- Правильно обрабатываем промисы
+- Тестируем как успешные, так и неуспешные сценарии
+
+### 5. Покрытие
+- Стремимся к 100% покрытию критических путей
+- Фокусируемся на бизнес-логике
+- Не тестируем тривиальный код
+description:
+globs:
+alwaysApply: true
+---

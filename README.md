@@ -66,6 +66,16 @@ npm run dev
 docker-compose up -d
 ```
 
+## 📚 Документация
+
+Подробная документация проекта доступна в папке [`.cursor/rules/`](.cursor/rules/):
+
+- **[🏗️ Архитектура](.cursor/rules/architecture.mdc)** - Обзор системы и компонентов
+- **[🔌 API и интерфейсы](.cursor/rules/api.mdc)** - Telegram Bot API и внутренние интерфейсы
+- **[🚀 Развертывание](.cursor/rules/deployment.mdc)** - Docker, CI/CD и DevOps
+- **[🧪 Тестирование](.cursor/rules/testing.mdc)** - Стратегия тестирования и покрытие
+- **[📋 Главная документация](.cursor/rules/project.mdc)** - Полное описание проекта
+
 ## 🧪 Тестирование
 
 ```bash
@@ -116,11 +126,15 @@ AutoNumberGame/
 │   ├── game/          # Игровая логика
 │   ├── storage/       # Хранение данных
 │   └── index.js       # Главный файл
-├── tests/             # Тесты
+├── .cursor/rules/     # 📚 Подробная документация MDC
+│   ├── project.mdc    # Главная документация
+│   ├── architecture.mdc # Архитектура системы
+│   ├── api.mdc        # API и интерфейсы
+│   ├── deployment.mdc # Развертывание и DevOps
+│   └── testing.mdc    # Стратегия тестирования
 ├── data/              # Данные игры (JSON)
-├── docker/            # Docker конфигурация
 ├── .github/           # GitHub Actions
-└── docs/              # Документация
+└── coverage/          # Отчеты о покрытии тестами
 ```
 
 ## 🔧 Команды бота
