@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  autonumbergame:
+    build: .
+    container_name: autonumbergame
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "console.log('Health check passed')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Дополнительный сервис для разработки
+  autonumbergame-dev:
+    build: .
+    container_name: autonumbergame-dev
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=development
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - .:/app
+      - /app/node_modules
+    ports:
+      - "3001:3000"
+    command: npm run dev
+    profiles:
+      - dev

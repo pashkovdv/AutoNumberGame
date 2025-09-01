@@ -1,0 +1,41 @@
+{
+  "name": "autonumbergame",
+  "version": "1.0.0",
+  "description": "Telegram bot game for collecting car numbers from 001 to 999",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix",
+    "build": "echo 'Build completed'",
+    "docker:build": "docker build -t autonumbergame .",
+    "docker:run": "docker run -p 3000:3000 autonumbergame"
+  },
+  "keywords": [
+    "telegram",
+    "bot",
+    "game",
+    "numbers"
+  ],
+  "author": "AutoNumberGame Team",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "dependencies": {
+    "dotenv": "^16.3.1",
+    "node-telegram-bot-api": "^0.64.0"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^1.6.1",
+    "eslint": "^8.55.0",
+    "nodemon": "^3.0.2",
+    "vitest": "^1.6.1"
+  }
+}

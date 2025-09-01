@@ -1,0 +1,115 @@
+
+
+export class GameLogic {
+  constructor(storage) {
+    this.storage = storage;
+  }
+
+  async processMessage(message, userId) {
+    const text = message.trim();
+    
+    // Обработка команды помощи
+    if (text === '?') {
+      return this.getMissingNumbersResponse();
+    }
+
+    // Обработка номера
+    if (this.isValidNumberFormat(text)) {
+      return await this.processNumberSubmission(text, userId);
+    }
+
+    // Неизвестная команда
+    return {
+      text: 'Отправьте номер от 001 до 999 или ? для просмотра недостающих номеров',
+      type: 'info'
+    };
+  }
+
+  isValidNumberFormat(text) {
+    return /^\d{1,3}$/.test(text) && parseInt(text) >= 1 && parseInt(text) <= 999;
+  }
+
+  async processNumberSubmission(number, userId) {
+    // Добавляем игрока в список
+    this.storage.data.players.add(userId);
+    
+    // Проверяем, есть ли уже такой номер
+    if (this.storage.hasNumber(number)) {
+      return {
+        text: 'уже есть',
+        type: 'duplicate'
+      };
+    }
+
+    // Добавляем новый номер
+    const result = this.storage.addNumber(number);
+    
+    if (result.wasAdded) {
+      let response = 'запомнили';
+      
+      // Проверяем, кратно ли 10 оставшееся количество
+      if (result.remaining % 10 === 0) {
+        response += `\nОсталось ${result.remaining} номеров`;
+      }
+      
+      // Проверяем победу
+      if (this.storage.isGameComplete()) {
+        response += '\n🎉 ПОБЕДА! 🎉\nВсе 999 номеров найдены!';
+      }
+      
+      // Сохраняем данные
+      await this.storage.saveData();
+      
+      return {
+        text: response,
+        type: 'success'
+      };
+    }
+
+    return {
+      text: 'Ошибка при добавлении номера',
+      type: 'error'
+    };
+  }
+
+  getMissingNumbersResponse() {
+    const missingNumbers = this.storage.getFirstTenMissingNumbers();
+    
+    if (missingNumbers.length === 0) {
+      return {
+        text: 'Все номера найдены! 🎉',
+        type: 'complete'
+      };
+    }
+
+    const numbersList = missingNumbers.join(', ');
+    return {
+      text: `Первые 10 недостающих номеров:\n${numbersList}`,
+      type: 'missing_numbers'
+    };
+  }
+
+  getGameStats() {
+    const stats = this.storage.getStats();
+    return {
+      text: `📊 Статистика игры:\n` +
+            `Найдено номеров: ${stats.totalNumbers}\n` +
+            `Осталось: ${stats.remaining}\n` +
+            `Игроков: ${stats.players}\n` +
+            `Последнее обновление: ${new Date(stats.lastUpdate).toLocaleString('ru-RU')}`,
+      type: 'stats'
+    };
+  }
+
+  async resetGame() {
+    this.storage.data.numbers.clear();
+    this.storage.data.players.clear();
+    this.storage.data.lastUpdate = new Date().toISOString();
+    await this.storage.saveData();
+    
+    return {
+      text: 'Игра сброшена. Все номера удалены.',
+      type: 'reset'
+    };
+  }
+}

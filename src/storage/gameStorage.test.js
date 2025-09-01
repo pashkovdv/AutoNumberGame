@@ -1,0 +1,213 @@
+import { describe, test, expect, beforeEach, afterEach, vi } from 'vitest';
+import { GameStorage } from './gameStorage.js';
+import fs from 'fs/promises';
+import path from 'path';
+
+// Мокаем fs модуль
+vi.mock('fs/promises');
+vi.mock('path');
+
+// Подавляем логирование в тестах
+const originalConsoleLog = console.log;
+const originalConsoleError = console.error;
+
+describe('GameStorage', () => {
+  let storage;
+  let mockDataPath;
+
+  beforeEach(() => {
+    // Подавляем логирование
+    console.log = vi.fn();
+    console.error = vi.fn();
+    
+    mockDataPath = './test_data.json';
+    storage = new GameStorage(mockDataPath);
+    
+    // Сбрасываем моки
+    vi.clearAllMocks();
+    
+    // Мокаем path.dirname
+    path.dirname.mockReturnValue('./');
+  });
+
+  afterEach(() => {
+    // Восстанавливаем оригинальное логирование
+    console.log = originalConsoleLog;
+    console.error = originalConsoleError;
+  });
+
+  describe('constructor', () => {
+    test('should initialize with default data structure', () => {
+      expect(storage.data.numbers).toBeInstanceOf(Set);
+      expect(storage.data.players).toBeInstanceOf(Set);
+      expect(storage.data.lastUpdate).toBeDefined();
+    });
+
+    test('should accept custom data file path', () => {
+      const customPath = './custom/path/data.json';
+      const customStorage = new GameStorage(customPath);
+      expect(customStorage.dataFilePath).toBe(customPath);
+    });
+  });
+
+  describe('isValidNumber', () => {
+    test('should validate correct 3-digit numbers', () => {
+      expect(storage.isValidNumber('001')).toBe(true);
+      expect(storage.isValidNumber('123')).toBe(true);
+      expect(storage.isValidNumber('999')).toBe(true);
+    });
+
+    test('should validate 1-2 digit numbers', () => {
+      expect(storage.isValidNumber('1')).toBe(true);
+      expect(storage.isValidNumber('42')).toBe(true);
+    });
+
+    test('should reject invalid numbers', () => {
+      expect(storage.isValidNumber('000')).toBe(false);
+      expect(storage.isValidNumber('1000')).toBe(false);
+      expect(storage.isValidNumber('abc')).toBe(false);
+      expect(storage.isValidNumber('12a')).toBe(false);
+      expect(storage.isValidNumber('')).toBe(false);
+    });
+  });
+
+  describe('addNumber', () => {
+    test('should add new valid number', () => {
+      const result = storage.addNumber('123');
+      expect(result.wasAdded).toBe(true);
+      expect(result.remaining).toBe(998);
+      expect(storage.data.numbers.has('123')).toBe(true);
+    });
+
+    test('should not add duplicate number', () => {
+      storage.addNumber('123');
+      const result = storage.addNumber('123');
+      expect(result.wasAdded).toBe(false);
+      expect(result.remaining).toBe(998);
+    });
+
+    test('should reject invalid number', () => {
+      const result = storage.addNumber('invalid');
+      expect(result.wasAdded).toBe(false);
+      expect(result.error).toBe('Invalid number format');
+    });
+  });
+
+  describe('hasNumber', () => {
+    test('should return true for existing number', () => {
+      storage.addNumber('123');
+      expect(storage.hasNumber('123')).toBe(true);
+    });
+
+    test('should return false for non-existing number', () => {
+      expect(storage.hasNumber('123')).toBe(false);
+    });
+
+    test('should handle string conversion', () => {
+      storage.addNumber('123');
+      expect(storage.hasNumber(123)).toBe(true);
+    });
+  });
+
+  describe('getRemainingCount', () => {
+    test('should return 999 for empty storage', () => {
+      expect(storage.getRemainingCount()).toBe(999);
+    });
+
+    test('should return correct count after adding numbers', () => {
+      storage.addNumber('001');
+      storage.addNumber('002');
+      expect(storage.getRemainingCount()).toBe(997);
+    });
+  });
+
+  describe('getFirstTenMissingNumbers', () => {
+    test('should return first 10 missing numbers', () => {
+      const missing = storage.getFirstTenMissingNumbers();
+      expect(missing).toHaveLength(10);
+      expect(missing[0]).toBe('001');
+      expect(missing[9]).toBe('010');
+    });
+
+    test('should return correct missing numbers after adding some', () => {
+      storage.addNumber('001');
+      storage.addNumber('003');
+      storage.addNumber('005');
+      
+      const missing = storage.getFirstTenMissingNumbers();
+      expect(missing).toContain('002');
+      expect(missing).toContain('004');
+      expect(missing).toContain('006');
+    });
+  });
+
+  describe('isGameComplete', () => {
+    test('should return false for incomplete game', () => {
+      expect(storage.isGameComplete()).toBe(false);
+    });
+
+    test('should return true when all numbers are collected', () => {
+      // Добавляем все числа от 1 до 999
+      for (let i = 1; i <= 999; i++) {
+        storage.addNumber(String(i));
+      }
+      expect(storage.isGameComplete()).toBe(true);
+    });
+  });
+
+  describe('getStats', () => {
+    test('should return correct statistics', () => {
+      storage.addNumber('123');
+      storage.addNumber('456');
+      
+      const stats = storage.getStats();
+      expect(stats.totalNumbers).toBe(2);
+      expect(stats.remaining).toBe(997);
+      expect(stats.players).toBe(0);
+      expect(stats.lastUpdate).toBeDefined();
+    });
+  });
+
+  describe('file operations', () => {
+    test('should create directory if not exists', async () => {
+      fs.access.mockRejectedValueOnce({ code: 'ENOENT' });
+      
+      await storage.ensureDataDirectory();
+      
+      expect(fs.mkdir).toHaveBeenCalledWith('./', { recursive: true });
+    });
+
+    test('should load existing data', async () => {
+      const mockData = {
+        numbers: ['001', '002'],
+        players: ['player1'],
+        lastUpdate: '2023-01-01T00:00:00.000Z'
+      };
+      
+      fs.readFile.mockResolvedValueOnce(JSON.stringify(mockData));
+      
+      await storage.loadData();
+      
+      expect(storage.data.numbers.has('001')).toBe(true);
+      expect(storage.data.numbers.has('002')).toBe(true);
+      expect(storage.data.players.has('player1')).toBe(true);
+    });
+
+    test('should save data correctly', async () => {
+      storage.addNumber('123');
+      
+      await storage.saveData();
+      
+      // Проверяем, что writeFile был вызван
+      expect(fs.writeFile).toHaveBeenCalled();
+      
+      // Проверяем, что первый аргумент - это путь к файлу
+      const writeFileCall = fs.writeFile.mock.calls[0];
+      expect(writeFileCall[0]).toBe(mockDataPath);
+      
+      // Проверяем, что второй аргумент содержит данные
+      const savedData = JSON.parse(writeFileCall[1]);
+      expect(savedData.numbers).toContain('123');
+    });
+  });
+});
