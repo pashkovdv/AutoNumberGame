@@ -253,7 +253,7 @@ describe('TelegramGameBot', () => {
 
       await bot.sendMessage(12345, 'Test message');
 
-      expect(consoleSpy).toHaveBeenCalledWith('Failed to send message:', error);
+      expect(consoleSpy).toHaveBeenCalledWith('❌ Ошибка отправки сообщения в чат', 12345, ':', error);
 
       consoleSpy.mockRestore();
     });
@@ -276,7 +276,7 @@ describe('TelegramGameBot', () => {
 
       await bot.stop();
 
-      expect(consoleSpy).toHaveBeenCalledWith('Error stopping bot:', error);
+      expect(consoleSpy).toHaveBeenCalledWith('❌ Error stopping bot:', error);
 
       consoleSpy.mockRestore();
     });

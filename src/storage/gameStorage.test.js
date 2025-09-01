@@ -50,6 +50,44 @@ describe('GameStorage', () => {
     });
   });
 
+  describe('initialize', () => {
+    test('should initialize storage successfully', async () => {
+      // Мокаем успешную инициализацию
+      fs.access.mockResolvedValue();
+      fs.readFile.mockResolvedValue('{"numbers":["001","002"],"players":["user1"],"lastUpdate":"2023-01-01T00:00:00.000Z"}');
+      
+      await storage.initialize();
+      
+      expect(fs.access).toHaveBeenCalledWith('./');
+      expect(fs.readFile).toHaveBeenCalledWith('./test_data.json', 'utf8');
+      expect(storage.data.numbers.has('001')).toBe(true);
+      expect(storage.data.players.has('user1')).toBe(true);
+    });
+
+    test('should create directory if it does not exist', async () => {
+      // Мокаем ошибку доступа к директории
+      fs.access.mockRejectedValue(new Error('Directory not found'));
+      fs.mkdir.mockResolvedValue();
+      fs.readFile.mockResolvedValue('{"numbers":[],"players":[],"lastUpdate":"2023-01-01T00:00:00.000Z"}');
+      
+      await storage.initialize();
+      
+      expect(fs.mkdir).toHaveBeenCalledWith('./', { recursive: true });
+      expect(fs.readFile).toHaveBeenCalled();
+    });
+
+    test('should handle loadData error and start fresh', async () => {
+      // Мокаем ошибку при загрузке данных (не ENOENT)
+      fs.access.mockResolvedValue();
+      fs.readFile.mockRejectedValue(new Error('File corrupted'));
+      fs.writeFile.mockResolvedValue();
+      
+      await storage.initialize();
+      
+      expect(fs.writeFile).toHaveBeenCalled();
+    });
+  });
+
   describe('isValidNumber', () => {
     test('should validate correct 3-digit numbers', () => {
       expect(storage.isValidNumber('001')).toBe(true);

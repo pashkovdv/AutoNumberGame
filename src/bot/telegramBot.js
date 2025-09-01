@@ -166,9 +166,9 @@ export class TelegramGameBot {
   async stop() {
     try {
       await this.bot.stopPolling();
-      console.log('Bot stopped');
+      console.log('✅ Bot stopped');
     } catch (error) {
-      console.error('Error stopping bot:', error);
+      console.error('❌ Error stopping bot:', error);
     }
   }
 
