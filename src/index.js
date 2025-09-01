@@ -29,6 +29,35 @@ try {
   console.error('❌ Ошибка загрузки .env:', error);
 }
 
+// Функция health check
+async function healthCheck(bot) {
+  try {
+    const stats = await bot.getBotStats();
+    if (stats) {
+      const lastActivity = new Date(stats.bot.lastActivity);
+      const timeSinceLastActivity = Date.now() - lastActivity.getTime();
+      
+      // Если нет активности больше 1 часа - предупреждение
+      if (timeSinceLastActivity > 3600000) {
+        console.warn('⚠️ Нет активности больше 1 часа');
+        console.warn(`🕐 Последняя активность: ${lastActivity.toLocaleString('ru-RU')}`);
+      }
+      
+      console.log('✅ Health check passed');
+      console.log(`📊 Последний update_id: ${stats.bot.lastUpdateId}`);
+      console.log(`💬 Обработано сообщений: ${stats.bot.totalMessagesProcessed}`);
+    }
+  } catch (error) {
+    console.error('❌ Health check failed:', error);
+  }
+}
+
+// Запуск health check каждые 5 минут
+function startHealthCheck(bot) {
+  setInterval(() => healthCheck(bot), 300000); // 5 минут
+  console.log('🔍 Health check запущен (каждые 5 минут)');
+}
+
 async function main() {
   console.log('🚀 Функция main() запущена');
   
@@ -54,6 +83,9 @@ async function main() {
     console.log('✅ Бот успешно запущен и готов к работе!');
     console.log('📱 Используйте команду /start в Telegram для начала игры');
     console.log('💡 Отправьте любой номер от 001 до 999 для тестирования');
+    
+    // Запускаем health check
+    startHealthCheck(bot);
     
     // Обработка сигналов завершения
     process.on('SIGINT', async () => {

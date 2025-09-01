@@ -5,7 +5,7 @@ export class GameStorage {
   constructor(dataFilePath = './data/game_data.json') {
     this.dataFilePath = dataFilePath;
     this.data = {
-      numbers: new Set(),
+      numbers: new Map(), // Map для хранения номер -> {number, userId, timestamp}
       players: new Set(),
       lastUpdate: new Date().toISOString()
     };
@@ -35,8 +35,26 @@ export class GameStorage {
       const data = await fs.readFile(this.dataFilePath, 'utf8');
       const parsed = JSON.parse(data);
       
-      // Восстанавливаем Set из массива
-      this.data.numbers = new Set(parsed.numbers || []);
+      // Восстанавливаем Map из массива объектов
+      if (parsed.numbers && Array.isArray(parsed.numbers)) {
+        this.data.numbers = new Map();
+        parsed.numbers.forEach(item => {
+          if (typeof item === 'string') {
+            // Совместимость со старой версией - простые строки
+            this.data.numbers.set(item, {
+              number: item,
+              userId: 'unknown',
+              timestamp: new Date().toISOString()
+            });
+          } else if (item && typeof item === 'object') {
+            // Новая версия - объекты с метаданными
+            this.data.numbers.set(item.number, item);
+          }
+        });
+      } else {
+        this.data.numbers = new Map();
+      }
+      
       this.data.players = new Set(parsed.players || []);
       this.data.lastUpdate = parsed.lastUpdate || new Date().toISOString();
     } catch (error) {
@@ -48,7 +66,7 @@ export class GameStorage {
 
   async saveData() {
     const dataToSave = {
-      numbers: Array.from(this.data.numbers),
+      numbers: Array.from(this.data.numbers.values()), // Сохраняем значения Map
       players: Array.from(this.data.players),
       lastUpdate: new Date().toISOString()
     };
@@ -56,11 +74,17 @@ export class GameStorage {
     await fs.writeFile(this.dataFilePath, JSON.stringify(dataToSave, null, 2));
   }
 
-  addNumber(number) {
+  addNumber(number, userId) {
     if (this.isValidNumber(number)) {
-      const wasAdded = !this.data.numbers.has(number);
+      // Нормализуем номер - всегда сохраняем как 3-значное число с ведущими нулями
+      const normalizedNumber = String(parseInt(number)).padStart(3, '0');
+      const wasAdded = !this.data.numbers.has(normalizedNumber);
       if (wasAdded) {
-        this.data.numbers.add(number);
+        this.data.numbers.set(normalizedNumber, {
+          number: normalizedNumber,
+          userId: userId,
+          timestamp: new Date().toISOString()
+        });
         this.data.lastUpdate = new Date().toISOString();
       }
       return { wasAdded, remaining: this.getRemainingCount() };
@@ -74,7 +98,9 @@ export class GameStorage {
   }
 
   hasNumber(number) {
-    return this.data.numbers.has(String(number));
+    // Нормализуем номер для проверки
+    const normalizedNumber = String(parseInt(number)).padStart(3, '0');
+    return this.data.numbers.has(normalizedNumber);
   }
 
   getRemainingCount() {
@@ -103,5 +129,122 @@ export class GameStorage {
       players: this.data.players.size,
       lastUpdate: this.data.lastUpdate
     };
+  }
+
+  // Получить информацию о номере (кто нашел и когда)
+  getNumberInfo(number) {
+    const normalizedNumber = String(parseInt(number)).padStart(3, '0');
+    return this.data.numbers.get(normalizedNumber) || null;
+  }
+
+  // Получить все номера с информацией о том, кто их нашел
+  getAllNumbersWithInfo() {
+    return Array.from(this.data.numbers.values());
+  }
+
+  // Получить статистику по пользователям (сколько номеров нашел каждый)
+  getUserStats() {
+    const userStats = new Map();
+    
+    this.data.numbers.forEach((numberInfo, number) => {
+      const userId = numberInfo.userId;
+      if (!userStats.has(userId)) {
+        userStats.set(userId, { userId, count: 0, numbers: [] });
+      }
+      const stats = userStats.get(userId);
+      stats.count++;
+      stats.numbers.push(number);
+    });
+    
+    return Array.from(userStats.values());
+  }
+
+  // Получить детальную статистику с username (если доступен)
+  async getUserStatsWithUsernames(bot) {
+    const userStats = this.getUserStats();
+    const detailedStats = [];
+    
+    for (const stat of userStats) {
+      try {
+        // Пытаемся получить информацию о пользователе из Telegram
+        const userInfo = await bot.getChat(stat.userId);
+        const username = userInfo.username || userInfo.first_name || `User ${stat.userId}`;
+        
+        detailedStats.push({
+          ...stat,
+          username: username,
+          displayName: userInfo.first_name || username
+        });
+      } catch (error) {
+        // Если не удалось получить информацию, используем userId
+        detailedStats.push({
+          ...stat,
+          username: `User ${stat.userId}`,
+          displayName: `User ${stat.userId}`
+        });
+      }
+    }
+    
+    // Сортируем по количеству найденных номеров (по убыванию)
+    return detailedStats.sort((a, b) => b.count - a.count);
+  }
+
+  // Новые методы для работы с состоянием бота
+  async saveBotState(state) {
+    const botStatePath = path.join(path.dirname(this.dataFilePath), 'bot_state.json');
+    const botState = {
+      lastUpdateId: state.lastUpdateId || 0,
+      lastActivity: new Date().toISOString(),
+      uptime: process.uptime(),
+      version: process.env.npm_package_version || '1.0.0',
+      lastMessageTime: state.lastMessageTime || new Date().toISOString(),
+      totalMessagesProcessed: state.totalMessagesProcessed || 0
+    };
+    
+    await fs.writeFile(botStatePath, JSON.stringify(botState, null, 2));
+  }
+
+  async getBotState() {
+    try {
+      const botStatePath = path.join(path.dirname(this.dataFilePath), 'bot_state.json');
+      const data = await fs.readFile(botStatePath, 'utf8');
+      return JSON.parse(data);
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        // Если файл не существует, возвращаем начальное состояние
+        return { 
+          lastUpdateId: 0, 
+          lastActivity: new Date().toISOString(),
+          uptime: 0,
+          version: '1.0.0',
+          lastMessageTime: new Date().toISOString(),
+          totalMessagesProcessed: 0
+        };
+      }
+      throw error;
+    }
+  }
+
+  async updateBotActivity(updateId, messageTime) {
+    const currentState = await this.getBotState();
+    const newState = {
+      ...currentState,
+      lastUpdateId: updateId,
+      lastMessageTime: messageTime,
+      lastActivity: new Date().toISOString(),
+      totalMessagesProcessed: currentState.totalMessagesProcessed + 1
+    };
+    
+    await this.saveBotState(newState);
+  }
+
+  async getLastActivity() {
+    const state = await this.getBotState();
+    return state.lastMessageTime;
+  }
+
+  async getLastUpdateId() {
+    const state = await this.getBotState();
+    return state.lastUpdateId;
   }
 }
