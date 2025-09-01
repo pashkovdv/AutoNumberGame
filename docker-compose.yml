@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   autonumbergame:
-    build: .
+    image: autonumbergame:latest
     container_name: autonumbergame
     restart: unless-stopped
     environment:

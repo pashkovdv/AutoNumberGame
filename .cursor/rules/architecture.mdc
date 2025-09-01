@@ -119,7 +119,6 @@ Error → Global Handler → Logging → Graceful Shutdown
 
 ### Возможности улучшения
 - Миграция на базу данных (PostgreSQL/MongoDB)
-- Webhook вместо polling
 - Кэширование в Redis
 - Микросервисная архитектура
 

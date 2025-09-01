@@ -4,6 +4,28 @@
 
 AutoNumberGame использует современный подход к развертыванию с использованием Docker контейнеризации и автоматизации через GitHub Actions.
 
+### Архитектура развертывания
+
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   GitHub        │    │   Docker Hub    │    │  Windows Server │
+│   Repository    │───►│   Registry      │───►│      2022       │
+│                 │    │                 │    │                 │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+         │                       │                       │
+         │                       │                       │
+         ▼                       ▼                       ▼
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│  GitHub Actions │    │  Docker Image   │    │  Production     │
+│  CI/CD Pipeline │    │  AutoNumberGame │    │  Environment    │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+```
+
+**Поток развертывания:**
+1. **GitHub** - сборка и тестирование кода
+2. **Docker Hub** - публикация готового образа
+3. **Windows Server 2022** - загрузка и развертывание образа
+
 ## Docker контейнеризация
 
 ### Dockerfile
@@ -225,14 +247,63 @@ docker-compose logs -f
 
 ### Продакшн развертывание
 
-#### Серверные требования
-- Ubuntu 20.04+ или CentOS 8+
-- Docker >= 20.10
-- Docker Compose >= 2.0
-- Минимум 1GB RAM
-- 10GB свободного места
+#### Серверные требования (Windows Server 2022)
+- **ОС**: Windows Server 2022 Standard/Datacenter
+- **Docker**: Docker Desktop for Windows или Docker Engine
+- **Docker Compose**: Встроенный в Docker Desktop
+- **Ресурсы**: Минимум 2GB RAM, 20GB свободного места
+- **Сеть**: Доступ к интернету для загрузки образов
+
+#### Особенности Windows Server 2022
+- Поддержка Windows Containers (опционально)
+- Интеграция с Active Directory
+- Встроенный брандмауэр Windows
+- PowerShell для автоматизации
+- Task Scheduler для планировщика задач
 
 #### Автоматическое развертывание
+
+**Для Windows Server 2022 (PowerShell):**
+```powershell
+# deploy.ps1
+param(
+    [string]$ImageTag = "latest",
+    [string]$DockerHubUsername = "your-username"
+)
+
+Write-Host "🚀 Starting deployment on Windows Server 2022..." -ForegroundColor Green
+
+try {
+    # Остановка существующих контейнеров
+    Write-Host "🛑 Stopping existing containers..." -ForegroundColor Yellow
+    docker-compose down
+    
+    # Удаление старых образов
+    Write-Host "🗑️ Removing old images..." -ForegroundColor Yellow
+    docker image prune -f
+    
+    # Загрузка нового образа с Docker Hub
+    Write-Host "⬇️ Pulling latest image from Docker Hub..." -ForegroundColor Yellow
+    docker pull "$DockerHubUsername/autonumbergame:$ImageTag"
+    
+    # Запуск сервисов
+    Write-Host "▶️ Starting services..." -ForegroundColor Yellow
+    docker-compose up -d
+    
+    # Проверка здоровья
+    Write-Host "🔍 Checking service health..." -ForegroundColor Yellow
+    Start-Sleep -Seconds 10
+    docker-compose ps
+    
+    Write-Host "✅ Deployment completed successfully!" -ForegroundColor Green
+    
+} catch {
+    Write-Host "❌ Deployment failed: $($_.Exception.Message)" -ForegroundColor Red
+    exit 1
+}
+```
+
+**Для Linux/Ubuntu (bash):**
 ```bash
 #!/bin/bash
 # deploy.sh
@@ -269,6 +340,47 @@ docker stats
 
 # Проверка health check
 docker inspect autonumbergame-prod | grep -A 10 Health
+```
+
+## Настройка Windows Server 2022
+
+### Установка Docker
+
+#### Способ 1: Docker Desktop for Windows
+```powershell
+# Скачивание и установка Docker Desktop
+# https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe
+
+# После установки перезагрузка сервера
+Restart-Computer -Force
+```
+
+#### Способ 2: Docker Engine (рекомендуется для серверов)
+```powershell
+# Установка через PowerShell
+Install-Module -Name DockerMsftProvider -Repository PSGallery -Force
+Install-Package -Name docker -ProviderName DockerMsftProvider -Force
+
+# Запуск службы Docker
+Start-Service docker
+Set-Service -Name docker -StartupType Automatic
+```
+
+### Настройка брандмауэра
+```powershell
+# Открытие портов для Docker
+New-NetFirewallRule -DisplayName "Docker" -Direction Inbound -Protocol TCP -LocalPort 2375,2376 -Action Allow
+New-NetFirewallRule -DisplayName "Docker Compose" -Direction Inbound -Protocol TCP -LocalPort 3000 -Action Allow
+```
+
+### Автоматизация через Task Scheduler
+```powershell
+# Создание задачи для автоматического обновления
+$Action = New-ScheduledTaskAction -Execute "PowerShell.exe" -Argument "-File C:\Scripts\deploy.ps1"
+$Trigger = New-ScheduledTaskTrigger -Daily -At 2:00AM
+$Principal = New-ScheduledTaskPrincipal -UserId "NT AUTHORITY\SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+
+Register-ScheduledTask -TaskName "AutoNumberGame Update" -Action $Action -Trigger $Trigger -Principal $Principal
 ```
 
 ## Мониторинг и логирование
