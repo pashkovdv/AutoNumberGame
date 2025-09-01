@@ -78,7 +78,7 @@ describe('GameLogic', () => {
       
       expect(result.type).toBe('success');
       expect(result.text).toContain('запомнили');
-      expect(mockStorage.addNumber).toHaveBeenCalledWith('123');
+      expect(mockStorage.addNumber).toHaveBeenCalledWith('123', 'user123');
       expect(mockStorage.saveData).toHaveBeenCalled();
     });
 
@@ -118,6 +118,7 @@ describe('GameLogic', () => {
       
       expect(result.type).toBe('success');
       expect(result.text).toContain('запомнили');
+      expect(mockStorage.addNumber).toHaveBeenCalledWith('123', 'user123');
       expect(mockStorage.data.players.has('user123')).toBe(true);
     });
 

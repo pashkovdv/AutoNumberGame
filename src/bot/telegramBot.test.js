@@ -146,7 +146,7 @@ describe('TelegramGameBot', () => {
       // Вызываем обработчик сообщения напрямую
       await bot.handleMessage(mockMsg);
 
-      expect(mockGameLogic.processMessage).toHaveBeenCalledWith('123', '12345'); // chat.id для приватного чата
+      expect(mockGameLogic.processMessage).toHaveBeenCalledWith('123', '67890'); // from.id пользователя
       expect(mockStorage.updateBotActivity).toHaveBeenCalledWith(12345, expect.any(String));
       expect(mockTelegramBot.sendMessage).toHaveBeenCalledWith(12345, 'запомнили', { parse_mode: 'HTML' });
     });

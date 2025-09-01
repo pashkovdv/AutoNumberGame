@@ -38,7 +38,7 @@ describe('GameStorage', () => {
 
   describe('constructor', () => {
     test('should initialize with default data structure', () => {
-      expect(storage.data.numbers).toBeInstanceOf(Set);
+      expect(storage.data.numbers).toBeInstanceOf(Map);
       expect(storage.data.players).toBeInstanceOf(Set);
       expect(storage.data.lastUpdate).toBeDefined();
     });
@@ -111,21 +111,21 @@ describe('GameStorage', () => {
 
   describe('addNumber', () => {
     test('should add new valid number', () => {
-      const result = storage.addNumber('123');
+      const result = storage.addNumber('123', 'user123');
       expect(result.wasAdded).toBe(true);
       expect(result.remaining).toBe(998);
       expect(storage.data.numbers.has('123')).toBe(true);
     });
 
     test('should not add duplicate number', () => {
-      storage.addNumber('123');
-      const result = storage.addNumber('123');
+      storage.addNumber('123', 'user123');
+      const result = storage.addNumber('123', 'user456');
       expect(result.wasAdded).toBe(false);
       expect(result.remaining).toBe(998);
     });
 
     test('should reject invalid number', () => {
-      const result = storage.addNumber('invalid');
+      const result = storage.addNumber('invalid', 'user123');
       expect(result.wasAdded).toBe(false);
       expect(result.error).toBe('Invalid number format');
     });
@@ -133,7 +133,7 @@ describe('GameStorage', () => {
 
   describe('hasNumber', () => {
     test('should return true for existing number', () => {
-      storage.addNumber('123');
+      storage.addNumber('123', 'user123');
       expect(storage.hasNumber('123')).toBe(true);
     });
 
@@ -142,7 +142,7 @@ describe('GameStorage', () => {
     });
 
     test('should handle string conversion', () => {
-      storage.addNumber('123');
+      storage.addNumber('123', 'user123');
       expect(storage.hasNumber(123)).toBe(true);
     });
   });
@@ -153,8 +153,8 @@ describe('GameStorage', () => {
     });
 
     test('should return correct count after adding numbers', () => {
-      storage.addNumber('001');
-      storage.addNumber('002');
+      storage.addNumber('001', 'user1');
+      storage.addNumber('002', 'user2');
       expect(storage.getRemainingCount()).toBe(997);
     });
   });
@@ -168,9 +168,9 @@ describe('GameStorage', () => {
     });
 
     test('should return correct missing numbers after adding some', () => {
-      storage.addNumber('001');
-      storage.addNumber('003');
-      storage.addNumber('005');
+      storage.addNumber('001', 'user1');
+      storage.addNumber('003', 'user2');
+      storage.addNumber('005', 'user3');
       
       const missing = storage.getFirstTenMissingNumbers();
       expect(missing).toContain('002');
@@ -187,7 +187,7 @@ describe('GameStorage', () => {
     test('should return true when all numbers are collected', () => {
       // Добавляем все числа от 1 до 999
       for (let i = 1; i <= 999; i++) {
-        storage.addNumber(String(i));
+        storage.addNumber(String(i), `user${i}`);
       }
       expect(storage.isGameComplete()).toBe(true);
     });
@@ -195,8 +195,8 @@ describe('GameStorage', () => {
 
   describe('getStats', () => {
     test('should return correct statistics', () => {
-      storage.addNumber('123');
-      storage.addNumber('456');
+      storage.addNumber('123', 'user1');
+      storage.addNumber('456', 'user2');
       
       const stats = storage.getStats();
       expect(stats.totalNumbers).toBe(2);
@@ -231,8 +231,29 @@ describe('GameStorage', () => {
       expect(storage.data.players.has('player1')).toBe(true);
     });
 
+    test('should load new format data', async () => {
+      const mockData = {
+        numbers: [
+          { number: '001', userId: 'user1', timestamp: '2023-01-01T00:00:00.000Z' },
+          { number: '002', userId: 'user2', timestamp: '2023-01-01T00:00:00.000Z' }
+        ],
+        players: ['player1'],
+        lastUpdate: '2023-01-01T00:00:00.000Z'
+      };
+      
+      fs.readFile.mockResolvedValueOnce(JSON.stringify(mockData));
+      
+      await storage.loadData();
+      
+      expect(storage.data.numbers.has('001')).toBe(true);
+      expect(storage.data.numbers.has('002')).toBe(true);
+      expect(storage.data.numbers.get('001').userId).toBe('user1');
+      expect(storage.data.numbers.get('002').userId).toBe('user2');
+      expect(storage.data.players.has('player1')).toBe(true);
+    });
+
     test('should save data correctly', async () => {
-      storage.addNumber('123');
+      storage.addNumber('123', 'user123');
       
       await storage.saveData();
       
@@ -245,7 +266,62 @@ describe('GameStorage', () => {
       
       // Проверяем, что второй аргумент содержит данные
       const savedData = JSON.parse(writeFileCall[1]);
-      expect(savedData.numbers).toContain('123');
+      expect(savedData.numbers).toHaveLength(1);
+      expect(savedData.numbers[0]).toMatchObject({
+        number: '123',
+        userId: 'user123',
+        timestamp: expect.any(String)
+      });
+    });
+  });
+
+  describe('new methods', () => {
+    test('should get number info', () => {
+      storage.addNumber('123', 'user123');
+      const info = storage.getNumberInfo('123');
+      expect(info).toMatchObject({
+        number: '123',
+        userId: 'user123',
+        timestamp: expect.any(String)
+      });
+    });
+
+    test('should get all numbers with info', () => {
+      storage.addNumber('123', 'user123');
+      storage.addNumber('456', 'user456');
+      const allNumbers = storage.getAllNumbersWithInfo();
+      expect(allNumbers).toHaveLength(2);
+      expect(allNumbers[0]).toMatchObject({
+        number: '123',
+        userId: 'user123',
+        timestamp: expect.any(String)
+      });
+    });
+
+    test('should get user stats', () => {
+      storage.addNumber('123', 'user123');
+      storage.addNumber('456', 'user123');
+      storage.addNumber('789', 'user456');
+      const userStats = storage.getUserStats();
+      expect(userStats).toHaveLength(2);
+      expect(userStats.find(s => s.userId === 'user123').count).toBe(2);
+      expect(userStats.find(s => s.userId === 'user456').count).toBe(1);
+    });
+
+    test('should normalize numbers correctly', () => {
+      storage.addNumber('1', 'user1');
+      storage.addNumber('02', 'user2');
+      storage.addNumber('003', 'user3');
+      
+      expect(storage.hasNumber('1')).toBe(true);
+      expect(storage.hasNumber('01')).toBe(true);
+      expect(storage.hasNumber('001')).toBe(true);
+      expect(storage.hasNumber('2')).toBe(true);
+      expect(storage.hasNumber('02')).toBe(true);
+      expect(storage.hasNumber('002')).toBe(true);
+      expect(storage.hasNumber('3')).toBe(true);
+      expect(storage.hasNumber('03')).toBe(true);
+      expect(storage.hasNumber('003')).toBe(true);
     });
   });
 });
