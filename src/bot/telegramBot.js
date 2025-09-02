@@ -119,7 +119,7 @@ export class TelegramGameBot {
   }
 
   async handleMessage(msg) {
-    const { text, chat, from, message_id, date } = msg;
+    const { text, chat, from, date } = msg;
     
     if (!text) return;
 

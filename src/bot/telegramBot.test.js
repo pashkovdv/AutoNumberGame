@@ -299,51 +299,51 @@ describe('TelegramGameBot', () => {
       process.env.NODE_ENV = originalEnv;
     });
 
-  describe('handleBotStatsCommand', () => {
-    test('should send bot statistics for admin in development', async () => {
-      const originalEnv = process.env.NODE_ENV;
-      process.env.NODE_ENV = 'development';
+    describe('handleBotStatsCommand', () => {
+      test('should send bot statistics for admin in development', async () => {
+        const originalEnv = process.env.NODE_ENV;
+        process.env.NODE_ENV = 'development';
 
-      const mockMsg = {
-        chat: { id: 12345, type: 'private' },
-        from: { id: 67890, is_bot: false, username: 'admin' }
-      };
+        const mockMsg = {
+          chat: { id: 12345, type: 'private' },
+          from: { id: 67890, is_bot: false, username: 'admin' }
+        };
 
-      mockTelegramBot.sendMessage.mockResolvedValue();
+        mockTelegramBot.sendMessage.mockResolvedValue();
 
-      await bot.handleBotStatsCommand(mockMsg);
+        await bot.handleBotStatsCommand(mockMsg);
 
-      expect(mockTelegramBot.sendMessage).toHaveBeenCalledWith(
-        12345,
-        expect.stringContaining('Статистика бота'),
-        { parse_mode: 'HTML' }
-      );
+        expect(mockTelegramBot.sendMessage).toHaveBeenCalledWith(
+          12345,
+          expect.stringContaining('Статистика бота'),
+          { parse_mode: 'HTML' }
+        );
 
-      process.env.NODE_ENV = originalEnv;
+        process.env.NODE_ENV = originalEnv;
+      });
+
+      test('should deny botstats for non-admin in production', async () => {
+        const originalEnv = process.env.NODE_ENV;
+        process.env.NODE_ENV = 'production';
+
+        const mockMsg = {
+          chat: { id: 12345, type: 'private' },
+          from: { id: 67890, is_bot: false, username: 'user' }
+        };
+
+        mockTelegramBot.sendMessage.mockResolvedValue();
+
+        await bot.handleBotStatsCommand(mockMsg);
+
+        expect(mockTelegramBot.sendMessage).toHaveBeenCalledWith(
+          12345,
+          'У вас нет прав для выполнения этой команды',
+          { parse_mode: 'HTML' }
+        );
+
+        process.env.NODE_ENV = originalEnv;
+      });
     });
-
-    test('should deny botstats for non-admin in production', async () => {
-      const originalEnv = process.env.NODE_ENV;
-      process.env.NODE_ENV = 'production';
-
-      const mockMsg = {
-        chat: { id: 12345, type: 'private' },
-        from: { id: 67890, is_bot: false, username: 'user' }
-      };
-
-      mockTelegramBot.sendMessage.mockResolvedValue();
-
-      await bot.handleBotStatsCommand(mockMsg);
-
-      expect(mockTelegramBot.sendMessage).toHaveBeenCalledWith(
-        12345,
-        'У вас нет прав для выполнения этой команды',
-        { parse_mode: 'HTML' }
-      );
-
-      process.env.NODE_ENV = originalEnv;
-    });
-  });
 
     test('should deny reset for non-admin in production', async () => {
       const originalEnv = process.env.NODE_ENV;

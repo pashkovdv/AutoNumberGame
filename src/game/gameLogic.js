@@ -1,5 +1,3 @@
-import { GameStorage } from '../storage/gameStorage.js';
-
 export class GameLogic {
   constructor(storage) {
     this.storage = storage;
