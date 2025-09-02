@@ -1,4 +1,4 @@
-
+import { GameStorage } from '../storage/gameStorage.js';
 
 export class GameLogic {
   constructor(storage) {
@@ -15,12 +15,12 @@ export class GameLogic {
 
     // Обработка номера
     if (this.isValidNumberFormat(text)) {
-      return await this.processNumberSubmission(text, userId, false);
+      return await this.processNumberSubmission(text, userId);
     }
 
     // Неизвестная команда
     return {
-      text: 'Отправьте номер от 001 до 999 или ? для просмотра недостающих номеров',
+      text: 'Отправьте номер от 001 до 999 или "?" для просмотра недостающих номеров',
       type: 'info'
     };
   }
@@ -29,11 +29,9 @@ export class GameLogic {
     return /^\d{1,3}$/.test(text) && parseInt(text) >= 1 && parseInt(text) <= 999;
   }
 
-  async processNumberSubmission(number, userId, isBot = false) {
-    // Добавляем игрока в список только если это не бот
-    if (!isBot) {
-      this.storage.data.players.add(userId);
-    }
+  async processNumberSubmission(number, userId) {
+    // Добавляем игрока в список
+    this.storage.data.players.add(userId);
     
     // Проверяем, есть ли уже такой номер
     if (this.storage.hasNumber(number)) {
@@ -43,8 +41,8 @@ export class GameLogic {
       };
     }
 
-    // Добавляем новый номер с userId
-    const result = this.storage.addNumber(number, userId);
+    // Добавляем новый номер
+    const result = this.storage.addNumber(number);
     
     if (result.wasAdded) {
       let response = 'запомнили';
@@ -93,12 +91,13 @@ export class GameLogic {
 
   getGameStats() {
     const stats = this.storage.getStats();
+    const lastUpdateMoscow = new Date(stats.lastUpdate).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' });
     return {
       text: `📊 Статистика игры:\n` +
             `Найдено номеров: ${stats.totalNumbers}\n` +
             `Осталось: ${stats.remaining}\n` +
             `Игроков: ${stats.players}\n` +
-            `Последнее обновление: ${new Date(stats.lastUpdate).toLocaleString('ru-RU')}`,
+            `Последнее обновление (Мск): ${lastUpdateMoscow}`,
       type: 'stats'
     };
   }
