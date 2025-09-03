@@ -10,7 +10,8 @@ export default defineConfig({
       exclude: [
         'node_modules/',
         'src/**/*.test.js',
-        'src/index.js'
+        'src/index.js',
+        '.eslintrc.cjs',
       ],
       thresholds: {
         global: {

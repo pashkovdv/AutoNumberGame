@@ -405,5 +405,441 @@ describe('GameStorage', () => {
       expect(retrievedState.lastMessageTime).toBe('2023-01-01T12:00:00.000Z');
       expect(retrievedState.totalMessagesProcessed).toBe(10);
     });
+
+    test('should handle loading data with null/undefined numbers array', async () => {
+      const mockData = {
+        numbers: null, // или undefined
+        players: ['user1'],
+        lastUpdate: '2023-01-01T00:00:00.000Z'
+      };
+
+      fs.readFile.mockResolvedValueOnce(JSON.stringify(mockData));
+
+      await storage.loadData();
+
+      expect(storage.data.numbers).toBeInstanceOf(Map);
+      expect(storage.data.numbers.size).toBe(0);
+      expect(storage.data.players.has('user1')).toBe(true);
+    });
+
+    test('should handle loading data with empty numbers array', async () => {
+      const mockData = {
+        numbers: [],
+        players: ['user1'],
+        lastUpdate: '2023-01-01T00:00:00.000Z'
+      };
+
+      fs.readFile.mockResolvedValueOnce(JSON.stringify(mockData));
+
+      await storage.loadData();
+
+      expect(storage.data.numbers).toBeInstanceOf(Map);
+      expect(storage.data.numbers.size).toBe(0);
+      expect(storage.data.players.has('user1')).toBe(true);
+    });
+
+    test('should get user stats with usernames successfully', async () => {
+      // Создаем тестовые данные
+      storage.addNumber('001', 'user1');
+      storage.addNumber('002', 'user1');
+      storage.addNumber('003', 'user2');
+
+      const mockBot = {
+        getChat: vi.fn()
+          .mockResolvedValueOnce({ username: 'testuser1', first_name: 'Test User 1' })
+          .mockResolvedValueOnce({ username: 'testuser2', first_name: 'Test User 2' })
+      };
+
+      const result = await storage.getUserStatsWithUsernames(mockBot);
+
+      expect(result).toHaveLength(2);
+      expect(result[0].userId).toBe('user1');
+      expect(result[0].count).toBe(2);
+      expect(result[0].username).toBe('testuser1');
+      expect(result[0].displayName).toBe('Test User 1');
+
+      expect(result[1].userId).toBe('user2');
+      expect(result[1].count).toBe(1);
+      expect(result[1].username).toBe('testuser2');
+      expect(result[1].displayName).toBe('Test User 2');
+    });
+
+    test('should handle getChat errors gracefully in getUserStatsWithUsernames', async () => {
+      // Создаем тестовые данные
+      storage.addNumber('001', 'user1');
+      storage.addNumber('002', 'user2');
+
+      const mockBot = {
+        getChat: vi.fn()
+          .mockRejectedValueOnce(new Error('User not found')) // Ошибка для user1
+          .mockResolvedValueOnce({ username: 'testuser2', first_name: 'Test User 2' }) // Успех для user2
+      };
+
+      const result = await storage.getUserStatsWithUsernames(mockBot);
+
+      expect(result).toHaveLength(2);
+
+      // Для user1 должна быть fallback информация
+      expect(result[0].userId).toBe('user1');
+      expect(result[0].username).toBe('User user1');
+      expect(result[0].displayName).toBe('User user1');
+
+      // Для user2 должна быть реальная информация
+      expect(result[1].userId).toBe('user2');
+      expect(result[1].username).toBe('testuser2');
+      expect(result[1].displayName).toBe('Test User 2');
+    });
+
+    test('should handle getChat returning user without username', async () => {
+      storage.addNumber('001', 'user1');
+
+      const mockBot = {
+        getChat: vi.fn().mockResolvedValueOnce({
+          first_name: 'Test User',
+          id: 12345
+          // username отсутствует
+        })
+      };
+
+      const result = await storage.getUserStatsWithUsernames(mockBot);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].username).toBe('Test User');
+      expect(result[0].displayName).toBe('Test User');
+    });
+
+    test('should update bot activity correctly', async () => {
+      const initialState = {
+        lastUpdateId: 100,
+        lastMessageTime: '2023-01-01T10:00:00.000Z',
+        totalMessagesProcessed: 5
+      };
+
+      // Мокаем начальное состояние
+      fs.readFile.mockResolvedValueOnce(JSON.stringify(initialState));
+
+      const updateId = 150;
+      const messageTime = '2023-01-01T11:00:00.000Z';
+
+      await storage.updateBotActivity(updateId, messageTime);
+
+      // Проверяем, что saveBotState был вызван с правильными данными
+      expect(fs.writeFile).toHaveBeenCalled();
+      const savedData = JSON.parse(fs.writeFile.mock.calls[0][1]);
+
+      expect(savedData.lastUpdateId).toBe(updateId);
+      expect(savedData.lastMessageTime).toBe(messageTime);
+      expect(savedData.totalMessagesProcessed).toBe(6); // 5 + 1
+      expect(savedData.lastActivity).toBeDefined();
+    });
+
+    test('should handle getBotState file read error', async () => {
+      // Мокаем ошибку чтения файла (не ENOENT)
+      fs.readFile.mockRejectedValueOnce(new Error('Permission denied'));
+
+      await expect(storage.getBotState()).rejects.toThrow('Permission denied');
+    });
+
+    test('should use GAME_DATA_FILE environment variable in constructor', () => {
+      // Сохраняем оригинальное значение
+      const originalEnv = process.env.GAME_DATA_FILE;
+
+      // Устанавливаем переменную окружения
+      process.env.GAME_DATA_FILE = '/custom/path/data.json';
+
+      // Создаем новый экземпляр
+      const customStorage = new GameStorage();
+
+      // Проверяем, что путь был установлен из переменной окружения
+      expect(customStorage.dataFilePath).toBe('/custom/path/data.json');
+
+      // Восстанавливаем оригинальное значение
+      if (originalEnv) {
+        process.env.GAME_DATA_FILE = originalEnv;
+      } else {
+        delete process.env.GAME_DATA_FILE;
+      }
+    });
+
+    test('should use default path when GAME_DATA_FILE is not set', () => {
+      // Сохраняем оригинальное значение
+      const originalEnv = process.env.GAME_DATA_FILE;
+
+      // Удаляем переменную окружения
+      delete process.env.GAME_DATA_FILE;
+
+      // Создаем новый экземпляр
+      const defaultStorage = new GameStorage();
+
+      // Проверяем, что используется путь по умолчанию
+      expect(defaultStorage.dataFilePath).toBe('./data/game_data.json');
+
+      // Восстанавливаем оригинальное значение
+      if (originalEnv) {
+        process.env.GAME_DATA_FILE = originalEnv;
+      }
+    });
+
+    test('should accept custom dataFilePath parameter', () => {
+      // Сохраняем оригинальное значение
+      const originalEnv = process.env.GAME_DATA_FILE;
+
+      // Устанавливаем переменную окружения
+      process.env.GAME_DATA_FILE = '/env/path/data.json';
+
+      // Создаем новый экземпляр с явным путем (должен игнорировать переменную окружения)
+      const customStorage = new GameStorage('/custom/path/data.json');
+
+      // Проверяем, что используется переданный параметр, а не переменная окружения
+      expect(customStorage.dataFilePath).toBe('/custom/path/data.json');
+
+      // Восстанавливаем оригинальное значение
+      if (originalEnv) {
+        process.env.GAME_DATA_FILE = originalEnv;
+      } else {
+        delete process.env.GAME_DATA_FILE;
+      }
+    });
+
+    test('should load data with valid players array', async () => {
+      const mockData = {
+        numbers: [
+          { number: '001', userId: 'user1', timestamp: '2023-01-01T00:00:00.000Z' },
+          { number: '002', userId: 'user2', timestamp: '2023-01-01T00:00:00.000Z' }
+        ],
+        players: ['user1', 'user2', 'user3'],
+        lastUpdate: '2023-01-01T00:00:00.000Z'
+      };
+
+      fs.readFile.mockResolvedValueOnce(JSON.stringify(mockData));
+
+      await storage.loadData();
+
+      expect(storage.data.players.has('user1')).toBe(true);
+      expect(storage.data.players.has('user2')).toBe(true);
+      expect(storage.data.players.has('user3')).toBe(true);
+      expect(storage.data.players.size).toBe(3);
+    });
+
+    test('should return null for non-existent number in getNumberInfo', () => {
+      storage.addNumber('001', 'user1');
+      storage.addNumber('002', 'user2');
+
+      const result = storage.getNumberInfo('999'); // несуществующий номер
+
+      expect(result).toBeNull();
+    });
+
+    test('should return valid number info for existing number', () => {
+      storage.addNumber('123', 'user123');
+
+      const result = storage.getNumberInfo('123');
+
+      expect(result).toMatchObject({
+        number: '123',
+        userId: 'user123',
+        timestamp: expect.any(String)
+      });
+    });
+
+    test('should handle successful user info retrieval in getUserStatsWithUsernames', async () => {
+      storage.addNumber('001', 'user1');
+      storage.addNumber('002', 'user1');
+
+      const mockBot = {
+        getChat: vi.fn().mockResolvedValueOnce({
+          username: 'testuser',
+          first_name: 'Test User',
+          id: 12345
+        })
+      };
+
+      const result = await storage.getUserStatsWithUsernames(mockBot);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].userId).toBe('user1');
+      expect(result[0].username).toBe('testuser');
+      expect(result[0].displayName).toBe('Test User');
+    });
+
+    test('should save bot state with all required fields', async () => {
+      const stateData = {
+        lastUpdateId: 123,
+        lastMessageTime: '2023-01-01T10:00:00.000Z',
+        totalMessagesProcessed: 42
+      };
+
+      await storage.saveBotState(stateData);
+
+      expect(fs.writeFile).toHaveBeenCalled();
+      const savedData = JSON.parse(fs.writeFile.mock.calls[0][1]);
+
+      expect(savedData).toMatchObject({
+        lastUpdateId: 123,
+        lastMessageTime: '2023-01-01T10:00:00.000Z',
+        totalMessagesProcessed: 42,
+        lastActivity: expect.any(String),
+        uptime: expect.any(Number)
+      });
+    });
+
+    test('should save bot state with default values', async () => {
+      await storage.saveBotState({});
+
+      expect(fs.writeFile).toHaveBeenCalled();
+      const savedData = JSON.parse(fs.writeFile.mock.calls[0][1]);
+
+      expect(savedData.lastUpdateId).toBe(0);
+      expect(savedData.totalMessagesProcessed).toBe(0);
+      expect(savedData.lastMessageTime).toBeDefined();
+      expect(savedData.lastActivity).toBeDefined();
+      expect(savedData.uptime).toBeDefined();
+    });
+
+    test('should handle loadData with players set', async () => {
+      const mockData = {
+        numbers: [
+          { number: '001', userId: 'user1', timestamp: '2023-01-01T00:00:00.000Z' }
+        ],
+        players: ['user1', 'user2'],
+        lastUpdate: '2023-01-01T00:00:00.000Z'
+      };
+
+      fs.readFile.mockResolvedValueOnce(JSON.stringify(mockData));
+
+      await storage.loadData();
+
+      expect(storage.data.players.has('user1')).toBe(true);
+      expect(storage.data.players.has('user2')).toBe(true);
+      expect(storage.data.players.size).toBe(2);
+      expect(storage.data.lastUpdate).toBe('2023-01-01T00:00:00.000Z');
+    });
+
+    test('should handle loadData with null players array', async () => {
+      const mockData = {
+        numbers: [],
+        players: null, // явное null значение
+        lastUpdate: '2023-01-01T00:00:00.000Z'
+      };
+
+      fs.readFile.mockResolvedValueOnce(JSON.stringify(mockData));
+
+      await storage.loadData();
+
+      expect(storage.data.players).toBeInstanceOf(Set);
+      expect(storage.data.players.size).toBe(0);
+      expect(storage.data.lastUpdate).toBe('2023-01-01T00:00:00.000Z');
+    });
+
+    test('should handle loadData with undefined players array', async () => {
+      const mockData = {
+        numbers: [],
+        // players отсутствует (undefined)
+        lastUpdate: '2023-01-01T00:00:00.000Z'
+      };
+
+      fs.readFile.mockResolvedValueOnce(JSON.stringify(mockData));
+
+      await storage.loadData();
+
+      expect(storage.data.players).toBeInstanceOf(Set);
+      expect(storage.data.players.size).toBe(0);
+      expect(storage.data.lastUpdate).toBe('2023-01-01T00:00:00.000Z');
+    });
+
+    test('should handle loadData with empty players array', async () => {
+      const mockData = {
+        numbers: [],
+        players: [],
+        lastUpdate: '2023-01-01T00:00:00.000Z'
+      };
+
+      fs.readFile.mockResolvedValueOnce(JSON.stringify(mockData));
+
+      await storage.loadData();
+
+      expect(storage.data.players).toBeInstanceOf(Set);
+      expect(storage.data.players.size).toBe(0);
+      expect(storage.data.lastUpdate).toBe('2023-01-01T00:00:00.000Z');
+    });
+
+    test('should handle loadData without lastUpdate field', async () => {
+      const mockData = {
+        numbers: [],
+        players: ['user1']
+      };
+
+      fs.readFile.mockResolvedValueOnce(JSON.stringify(mockData));
+
+      // Сохраняем время до выполнения
+      const beforeTime = new Date();
+
+      await storage.loadData();
+
+      // Сохраняем время после выполнения
+      const afterTime = new Date();
+
+      expect(storage.data.players.has('user1')).toBe(true);
+      expect(storage.data.lastUpdate).toBeDefined();
+
+      // Проверяем, что lastUpdate находится в разумном диапазоне времени
+      const updateTime = new Date(storage.data.lastUpdate);
+      expect(updateTime.getTime()).toBeGreaterThanOrEqual(beforeTime.getTime() - 1000);
+      expect(updateTime.getTime()).toBeLessThanOrEqual(afterTime.getTime() + 1000);
+    });
+
+    test('should handle user info with username in getUserStatsWithUsernames', async () => {
+      storage.addNumber('001', 'user1');
+
+      const mockBot = {
+        getChat: vi.fn().mockResolvedValueOnce({
+          username: 'testuser',
+          first_name: 'Test',
+          last_name: 'User',
+          id: 12345
+        })
+      };
+
+      const result = await storage.getUserStatsWithUsernames(mockBot);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].username).toBe('testuser');
+      expect(result[0].displayName).toBe('Test');
+    });
+
+    test('should handle user info with only first_name in getUserStatsWithUsernames', async () => {
+      storage.addNumber('001', 'user1');
+
+      const mockBot = {
+        getChat: vi.fn().mockResolvedValueOnce({
+          first_name: 'TestUser',
+          id: 12345
+          // нет username
+        })
+      };
+
+      const result = await storage.getUserStatsWithUsernames(mockBot);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].username).toBe('TestUser');
+      expect(result[0].displayName).toBe('TestUser');
+    });
+
+    test('should handle user info with no username or first_name in getUserStatsWithUsernames', async () => {
+      storage.addNumber('001', 'user1');
+
+      const mockBot = {
+        getChat: vi.fn().mockResolvedValueOnce({
+          id: 12345
+          // нет username и first_name
+        })
+      };
+
+      const result = await storage.getUserStatsWithUsernames(mockBot);
+
+      expect(result).toHaveLength(1);
+      expect(result[0].username).toBe('User user1');
+      expect(result[0].displayName).toBe('User user1');
+    });
   });
 });

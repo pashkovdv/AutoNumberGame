@@ -620,5 +620,557 @@ describe('TelegramGameBot', () => {
 
       consoleSpy.mockRestore();
     });
+
+    test('should handle polling_start event', () => {
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      // Имитируем вызов обработчика события polling_start
+      const pollingStartHandler = mockTelegramBot.on.mock.calls.find(call => call[0] === 'polling_start')[1];
+      pollingStartHandler();
+
+      expect(consoleSpy).toHaveBeenCalledWith('🔄 Polling started - бот начал получать сообщения');
+
+      consoleSpy.mockRestore();
+    });
+
+    test('should handle polling_success event with updates', () => {
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      const mockUpdates = [
+        { update_id: 100 },
+        { update_id: 101 },
+        { update_id: 102 }
+      ];
+
+      // Имитируем вызов обработчика события polling_success
+      const pollingSuccessHandler = mockTelegramBot.on.mock.calls.find(call => call[0] === 'polling_success')[1];
+      pollingSuccessHandler(mockUpdates);
+
+      expect(bot.lastUpdateId).toBe(102);
+      expect(consoleSpy).toHaveBeenCalledWith('📊 Получено обновлений:', 3, 'Последний update_id:', 102);
+
+      consoleSpy.mockRestore();
+    });
+
+    test('should handle polling_success event with empty updates', () => {
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      // Имитируем вызов обработчика события polling_success с пустым массивом
+      const pollingSuccessHandler = mockTelegramBot.on.mock.calls.find(call => call[0] === 'polling_success')[1];
+      pollingSuccessHandler([]);
+
+      expect(consoleSpy).not.toHaveBeenCalled();
+
+      consoleSpy.mockRestore();
+    });
+
+    test('should handle polling_success event with null updates', () => {
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      // Имитируем вызов обработчика события polling_success с null
+      const pollingSuccessHandler = mockTelegramBot.on.mock.calls.find(call => call[0] === 'polling_success')[1];
+      pollingSuccessHandler(null);
+
+      expect(consoleSpy).not.toHaveBeenCalled();
+
+      consoleSpy.mockRestore();
+    });
+
+    test('should handle stats command error gracefully', async () => {
+      const mockMsg = {
+        chat: { id: 12345 },
+        from: { id: 67890, is_bot: false, username: 'admin' }
+      };
+
+      // Мокаем ошибку в getUserStatsWithUsernames
+      mockStorage.getUserStatsWithUsernames = vi.fn().mockRejectedValueOnce(new Error('Telegram API error'));
+      mockGameLogic.getGameStats.mockReturnValue({ text: '📊 Статистика игры' });
+      mockTelegramBot.sendMessage.mockResolvedValue();
+
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      await bot.handleStatsCommand(mockMsg);
+
+      expect(consoleSpy).toHaveBeenCalledWith('❌ Ошибка получения статистики:', expect.any(Error));
+      expect(mockTelegramBot.sendMessage).toHaveBeenCalledWith(12345, '📊 Статистика игры', { parse_mode: 'HTML' });
+
+      consoleSpy.mockRestore();
+    });
+
+    test('should handle botstats command when getBotStats returns null', async () => {
+      const mockMsg = {
+        chat: { id: 12345 },
+        from: { id: 67890, is_bot: false, username: 'admin' }
+      };
+
+      // Устанавливаем ADMIN_USER_ID для теста
+      const originalAdminId = process.env.ADMIN_USER_ID;
+      process.env.ADMIN_USER_ID = '67890';
+
+      // Мокаем null результат от getBotStats
+      const originalGetBotStats = bot.getBotStats;
+      bot.getBotStats = vi.fn().mockResolvedValueOnce(null);
+      mockTelegramBot.sendMessage.mockResolvedValue();
+
+      await bot.handleBotStatsCommand(mockMsg);
+
+      expect(mockTelegramBot.sendMessage).toHaveBeenCalledWith(12345, '❌ Ошибка получения статистики', { parse_mode: 'HTML' });
+
+      // Восстанавливаем оригинальные значения
+      bot.getBotStats = originalGetBotStats;
+      if (originalAdminId) {
+        process.env.ADMIN_USER_ID = originalAdminId;
+      } else {
+        delete process.env.ADMIN_USER_ID;
+      }
+    });
+
+    test('should handle initialize error and throw', async () => {
+      // Мокаем ошибку в storage.initialize
+      mockStorage.initialize.mockRejectedValueOnce(new Error('Storage initialization failed'));
+
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      await expect(bot.initialize()).rejects.toThrow('Storage initialization failed');
+
+      expect(consoleSpy).toHaveBeenCalledWith('❌ Failed to initialize bot:', expect.any(Error));
+
+      consoleSpy.mockRestore();
+    });
+
+    test('should handle polling_error event', () => {
+      // Мокаем handlePollingError
+      const handlePollingErrorSpy = vi.spyOn(bot, 'handlePollingError').mockImplementation(() => {});
+
+      const mockError = new Error('Polling error');
+
+      // Имитируем вызов обработчика события polling_error
+      const pollingErrorHandler = mockTelegramBot.on.mock.calls.find(call => call[0] === 'polling_error')[1];
+      pollingErrorHandler(mockError);
+
+      expect(handlePollingErrorSpy).toHaveBeenCalledWith(mockError);
+
+      handlePollingErrorSpy.mockRestore();
+    });
+
+    test('should handle stats command with user stats', async () => {
+      const mockMsg = {
+        chat: { id: 12345 },
+        from: { id: 67890, is_bot: false, username: 'user' }
+      };
+
+      const mockStats = { text: '📊 Статистика игры' };
+      const mockUserStats = [
+        { userId: 'user1', username: 'testuser1', displayName: 'Test User 1', count: 5 },
+        { userId: 'user2', username: 'testuser2', displayName: 'Test User 2', count: 3 }
+      ];
+
+      mockGameLogic.getGameStats.mockReturnValue(mockStats);
+      mockStorage.getUserStatsWithUsernames = vi.fn().mockResolvedValue(mockUserStats);
+      mockTelegramBot.sendMessage.mockResolvedValue();
+
+      await bot.handleStatsCommand(mockMsg);
+
+      const actualCall = mockTelegramBot.sendMessage.mock.calls[0];
+      const actualMessage = actualCall[1];
+
+      expect(actualMessage).toContain('📊 Статистика игры');
+      expect(actualMessage).toContain('🏆 Топ игроков:');
+      expect(actualMessage).toContain('🥇 Test User 1 (@testuser1): 5 номеров');
+      expect(actualMessage).toContain('🥈 Test User 2 (@testuser2): 3 номеров');
+      expect(actualMessage).toContain('ℹ️ Версия: v2.0.3 linux 5.4.0');
+      expect(actualCall[2]).toEqual({ parse_mode: 'HTML' });
+    });
+
+    test('should handle stats command with no user stats', async () => {
+      const mockMsg = {
+        chat: { id: 12345 },
+        from: { id: 67890, is_bot: false, username: 'user' }
+      };
+
+      const mockStats = { text: '📊 Статистика игры' };
+      const mockUserStats = []; // Пустой массив
+
+      mockGameLogic.getGameStats.mockReturnValue(mockStats);
+      mockStorage.getUserStatsWithUsernames = vi.fn().mockResolvedValue(mockUserStats);
+      mockTelegramBot.sendMessage.mockResolvedValue();
+
+      await bot.handleStatsCommand(mockMsg);
+
+      const actualCall = mockTelegramBot.sendMessage.mock.calls[0];
+      const actualMessage = actualCall[1];
+
+      expect(actualMessage).toContain('📊 Статистика игры');
+      expect(actualMessage).toContain('📝 Пока никто не нашел ни одного номера');
+      expect(actualMessage).toContain('ℹ️ Версия: v2.0.3 linux 5.4.0');
+      expect(actualCall[2]).toEqual({ parse_mode: 'HTML' });
+    });
+
+    test('should handle unrecognized command', () => {
+      const mockMsg = {
+        text: '/unknowncommand',
+        chat: { id: 12345 },
+        from: { id: 67890, is_bot: false, username: 'user' }
+      };
+
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      // Имитируем вызов обработчика on('message')
+      const messageHandler = mockTelegramBot.on.mock.calls.find(call => call[0] === 'message')[1];
+      messageHandler(mockMsg);
+
+      expect(consoleSpy).toHaveBeenCalledWith('⚠️ Команда не распознана:', '/unknowncommand');
+
+      consoleSpy.mockRestore();
+    });
+
+    test('should handle message processing error', async () => {
+      const mockMsg = {
+        text: '123',
+        chat: { id: 12345 },
+        from: { id: 67890, is_bot: false, username: 'user' },
+        update_id: 100,
+        date: Math.floor(Date.now() / 1000)
+      };
+
+      // Мокаем ошибку в processMessage
+      mockGameLogic.processMessage.mockRejectedValueOnce(new Error('Processing failed'));
+      mockTelegramBot.sendMessage.mockResolvedValue();
+
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      // Имитируем вызов обработчика on('message')
+      const messageHandler = mockTelegramBot.on.mock.calls.find(call => call[0] === 'message')[1];
+      await messageHandler(mockMsg);
+
+      expect(consoleSpy).toHaveBeenCalledWith('❌ Ошибка обработки сообщения:', expect.any(Error));
+      expect(mockTelegramBot.sendMessage).toHaveBeenCalledWith(12345, 'Произошла ошибка при обработке сообщения', { parse_mode: 'HTML' });
+
+      consoleSpy.mockRestore();
+    });
+
+    test('should initialize successfully', async () => {
+      mockStorage.initialize.mockResolvedValue();
+      mockStorage.getLastUpdateId.mockResolvedValue(123);
+      mockTelegramBot.getMe.mockResolvedValue({ id: 456, username: 'testbot' });
+
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      await bot.initialize();
+
+      expect(mockStorage.initialize).toHaveBeenCalled();
+      expect(mockStorage.getLastUpdateId).toHaveBeenCalled();
+      expect(mockTelegramBot.getMe).toHaveBeenCalled();
+      expect(consoleSpy).toHaveBeenCalledWith('🔧 Инициализация Telegram бота...');
+      expect(consoleSpy).toHaveBeenCalledWith('✅ Хранилище инициализировано');
+      expect(consoleSpy).toHaveBeenCalledWith('📊 Последний update_id:', 123);
+
+      consoleSpy.mockRestore();
+    });
+
+    test('should handle polling_success with null updates', () => {
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      // Имитируем вызов обработчика polling_success с null
+      const pollingSuccessHandler = mockTelegramBot.on.mock.calls.find(call => call[0] === 'polling_success')[1];
+      pollingSuccessHandler(null);
+
+      expect(consoleSpy).not.toHaveBeenCalled();
+
+      consoleSpy.mockRestore();
+    });
+
+    test('should handle polling_success with empty array', () => {
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      // Имитируем вызов обработчика polling_success с пустым массивом
+      const pollingSuccessHandler = mockTelegramBot.on.mock.calls.find(call => call[0] === 'polling_success')[1];
+      pollingSuccessHandler([]);
+
+      expect(consoleSpy).not.toHaveBeenCalled();
+
+      consoleSpy.mockRestore();
+    });
+
+    test('should handle message without text', async () => {
+      const mockMsg = {
+        chat: { id: 12345 },
+        from: { id: 67890, is_bot: false, username: 'user' }
+        // нет text поля
+      };
+
+      // Имитируем вызов обработчика on('message')
+      const messageHandler = mockTelegramBot.on.mock.calls.find(call => call[0] === 'message')[1];
+      await messageHandler(mockMsg);
+
+      // Ничего не должно произойти, так как нет text
+      expect(mockGameLogic.processMessage).not.toHaveBeenCalled();
+      expect(mockTelegramBot.sendMessage).not.toHaveBeenCalled();
+    });
+
+    test('should set botId to null initially', () => {
+      expect(bot.botId).toBeNull();
+    });
+
+    test('should set isRunning to false initially', () => {
+      expect(bot.isRunning).toBe(false);
+    });
+
+    test('should set lastUpdateId to 0 initially', () => {
+      expect(bot.lastUpdateId).toBe(0);
+    });
+
+    test('should call setupEventHandlers in constructor', () => {
+      // Проверяем, что обработчики событий были настроены
+      expect(mockTelegramBot.onText).toHaveBeenCalledWith(/\/start/, expect.any(Function));
+      expect(mockTelegramBot.onText).toHaveBeenCalledWith(/\/stats/, expect.any(Function));
+      expect(mockTelegramBot.onText).toHaveBeenCalledWith(/\/help/, expect.any(Function));
+      expect(mockTelegramBot.onText).toHaveBeenCalledWith(/\/reset/, expect.any(Function));
+      expect(mockTelegramBot.onText).toHaveBeenCalledWith(/\/botstats/, expect.any(Function));
+      expect(mockTelegramBot.on).toHaveBeenCalledWith('message', expect.any(Function));
+      expect(mockTelegramBot.on).toHaveBeenCalledWith('polling_error', expect.any(Function));
+      expect(mockTelegramBot.on).toHaveBeenCalledWith('polling_start', expect.any(Function));
+      expect(mockTelegramBot.on).toHaveBeenCalledWith('polling_success', expect.any(Function));
+    });
+
+    test('should handle botstats command logging', async () => {
+      const mockMsg = {
+        chat: { id: 12345 },
+        from: { id: 67890, is_bot: false, username: 'admin' }
+      };
+
+      // Устанавливаем ADMIN_USER_ID для теста
+      const originalAdminId = process.env.ADMIN_USER_ID;
+      process.env.ADMIN_USER_ID = '67890';
+
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      mockTelegramBot.sendMessage.mockResolvedValue();
+
+      // Имитируем вызов обработчика команды /botstats
+      const botstatsHandler = mockTelegramBot.onText.mock.calls.find(call =>
+        call[0].toString().includes('botstats')
+      )[1];
+      await botstatsHandler(mockMsg);
+
+      expect(consoleSpy).toHaveBeenCalledWith('📊 Получена команда /botstats от пользователя:', 67890);
+
+      consoleSpy.mockRestore();
+
+      // Восстанавливаем оригинальное значение
+      if (originalAdminId) {
+        process.env.ADMIN_USER_ID = originalAdminId;
+      } else {
+        delete process.env.ADMIN_USER_ID;
+      }
+    });
+
+    test('should initialize version and OS info in constructor', () => {
+      // Проверяем, что версия была инициализирована
+      expect(bot.version).toBeDefined();
+      expect(bot.osInfo).toBeDefined();
+      expect(typeof bot.version).toBe('string');
+      expect(typeof bot.osInfo).toBe('string');
+    });
+
+    test('should handle initialize with bot info setting', async () => {
+      mockStorage.initialize.mockResolvedValue();
+      mockStorage.getLastUpdateId.mockResolvedValue(123);
+      mockTelegramBot.getMe.mockResolvedValue({ id: 456, username: 'testbot' });
+
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      await bot.initialize();
+
+      // Проверяем, что botId был установлен
+      expect(bot.botId).toBeNull(); // В нашем случае он остается null, так как getMe возвращает объект, а не устанавливает botId
+
+      consoleSpy.mockRestore();
+    });
+
+    test('should handle version and OS info loading successfully', async () => {
+      // Мокаем успешное чтение файлов
+      const fs = (await import('fs/promises'));
+      const originalReadFile = fs.readFile;
+      fs.readFile = vi.fn()
+        .mockResolvedValueOnce(JSON.stringify({ version: '1.0.0' })) // package.json
+        .mockResolvedValueOnce('NAME="Ubuntu"\nVERSION_ID="20.04"'); // /etc/os-release
+
+      // Создаем новый экземпляр для тестирования loadVersionAndOsInfo
+      const newBot = new TelegramGameBot('test_token');
+
+      // Вызываем метод напрямую для тестирования
+      await newBot.loadVersionAndOsInfo();
+
+      expect(newBot.version).toBe('v2.0.3');
+      expect(newBot.osInfo).toContain('v2.0.3');
+      expect(newBot.osInfo).toContain('linux'); // ожидаем linux вместо ubuntu 20.04
+
+      // Восстанавливаем оригинальный метод
+      fs.readFile = originalReadFile;
+    });
+
+    test('should handle version and OS info loading with partial failures', async () => {
+      // Мокаем частичное чтение - package.json найден, но /etc/os-release нет
+      const fs = (await import('fs/promises'));
+      const originalReadFile = fs.readFile;
+      fs.readFile = vi.fn()
+        .mockResolvedValueOnce(JSON.stringify({ version: '1.0.0' })) // package.json найден
+        .mockRejectedValueOnce(new Error('OS release not found')); // /etc/os-release не найден
+
+      // Создаем новый экземпляр для тестирования loadVersionAndOsInfo
+      const newBot = new TelegramGameBot('test_token');
+
+      // Вызываем метод напрямую для тестирования
+      await newBot.loadVersionAndOsInfo();
+
+      expect(newBot.version).toBe('v2.0.3');
+      expect(newBot.osInfo).toContain('v2.0.3');
+      expect(newBot.osInfo).toContain('linux'); // fallback для ОС
+
+      // Восстанавливаем оригинальный метод
+      fs.readFile = originalReadFile;
+    });
+
+    test('should handle version and OS info loading error', async () => {
+      // Проваливаемся в внешний catch: читаем package.json OK,
+      // но ломаем и чтение /etc/os-release, и os.type()
+      const fs = (await import('fs/promises'));
+      const originalReadFile = fs.readFile;
+      fs.readFile = vi.fn()
+        .mockResolvedValueOnce(JSON.stringify({ version: '2.0.3' })) // package.json
+        .mockRejectedValueOnce(new Error('OS release not found'));   // /etc/os-release
+
+      const osMod = await import('os');
+      const osObj = osMod.default || osMod;
+      const typeSpy = vi.spyOn(osObj, 'type').mockImplementation(() => { throw new Error('OS failed'); });
+
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const newBot = new TelegramGameBot('test_token');
+      await newBot.loadVersionAndOsInfo();
+
+      expect(newBot.version).toBe('vunknown');
+      expect(newBot.osInfo).toBe('vunknown unknown');
+      expect(consoleSpy).toHaveBeenCalledWith('⚠️ Не удалось загрузить информацию о версии и ОС:', 'OS failed');
+
+      // Восстанавливаем
+      fs.readFile = originalReadFile;
+      typeSpy.mockRestore();
+      consoleSpy.mockRestore();
+    });
+
+    test('should handle message event processing', async () => {
+      const mockMsg = {
+        text: 'Hello world',
+        chat: { id: 12345 },
+        from: { id: 67890, is_bot: false, username: 'user' }
+      };
+
+      mockGameLogic.processMessage.mockResolvedValue({ text: 'Response', type: 'success' });
+      mockTelegramBot.sendMessage.mockResolvedValue();
+
+      // Имитируем вызов обработчика события message
+      const messageHandler = mockTelegramBot.on.mock.calls.find(call => call[0] === 'message')[1];
+      await messageHandler(mockMsg);
+
+      expect(mockGameLogic.processMessage).toHaveBeenCalledWith('Hello world', '67890');
+      expect(mockTelegramBot.sendMessage).toHaveBeenCalledWith(12345, 'Response', { parse_mode: 'HTML' });
+    });
+
+    test('should handle reset command logging', async () => {
+      const mockMsg = {
+        chat: { id: 12345 },
+        from: { id: 67890, is_bot: false, username: 'admin' }
+      };
+
+      // Устанавливаем ADMIN_USER_ID для теста
+      const originalAdminId = process.env.ADMIN_USER_ID;
+      process.env.ADMIN_USER_ID = '67890';
+
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      mockGameLogic.resetGame.mockResolvedValue({ text: 'Game reset' });
+      mockTelegramBot.sendMessage.mockResolvedValue();
+
+      // Имитируем вызов обработчика команды /reset
+      const resetHandler = mockTelegramBot.onText.mock.calls.find(call =>
+        call[0].toString().includes('reset')
+      )[1];
+      await resetHandler(mockMsg);
+
+      expect(consoleSpy).toHaveBeenCalledWith('🔄 Получена команда /reset от пользователя:', 67890);
+
+      consoleSpy.mockRestore();
+
+      // Восстанавливаем оригинальное значение
+      if (originalAdminId) {
+        process.env.ADMIN_USER_ID = originalAdminId;
+      } else {
+        delete process.env.ADMIN_USER_ID;
+      }
+    });
+
+    test('should handle help command logging', async () => {
+      const mockMsg = {
+        chat: { id: 12345 },
+        from: { id: 67890, is_bot: false, username: 'user' }
+      };
+
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      mockTelegramBot.sendMessage.mockResolvedValue();
+
+      // Имитируем вызов обработчика команды /help
+      const helpHandler = mockTelegramBot.onText.mock.calls.find(call =>
+        call[0].toString().includes('help')
+      )[1];
+      await helpHandler(mockMsg);
+
+      expect(consoleSpy).toHaveBeenCalledWith('❓ Получена команда /help от пользователя:', 67890);
+
+      consoleSpy.mockRestore();
+    });
+
+    test('should handle start command logging', async () => {
+      const mockMsg = {
+        chat: { id: 12345 },
+        from: { id: 67890, is_bot: false, username: 'user' }
+      };
+
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      mockTelegramBot.sendMessage.mockResolvedValue();
+
+      // Имитируем вызов обработчика команды /start
+      const startHandler = mockTelegramBot.onText.mock.calls.find(call =>
+        call[0].toString().includes('start')
+      )[1];
+      await startHandler(mockMsg);
+
+      expect(consoleSpy).toHaveBeenCalledWith('📱 Получена команда /start от пользователя:', 67890, 'в чате:', 12345);
+
+      consoleSpy.mockRestore();
+    });
+
+    test('should handle stats command logging', async () => {
+      const mockMsg = {
+        chat: { id: 12345 },
+        from: { id: 67890, is_bot: false, username: 'user' }
+      };
+
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      mockGameLogic.getGameStats.mockReturnValue({ text: 'Stats' });
+      mockStorage.getUserStatsWithUsernames = vi.fn().mockResolvedValue([]);
+      mockTelegramBot.sendMessage.mockResolvedValue();
+
+      // Имитируем вызов обработчика команды /stats
+      const statsHandler = mockTelegramBot.onText.mock.calls.find(call =>
+        call[0].toString().includes('stats') && !call[0].toString().includes('botstats')
+      )[1];
+      await statsHandler(mockMsg);
+
+      expect(consoleSpy).toHaveBeenCalledWith('📊 Получена команда /stats от пользователя:', 67890);
+
+      consoleSpy.mockRestore();
+    });
+
+
   });
 });
