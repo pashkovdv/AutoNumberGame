@@ -1,6 +1,6 @@
 {
   "name": "autonumbergame",
-  "version": "2.0.0",
+  "version": "2.0.2",
   "description": "Telegram bot game for collecting car numbers from 001 to 999",
   "main": "src/index.js",
   "type": "module",
