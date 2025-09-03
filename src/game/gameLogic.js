@@ -17,14 +17,16 @@ export class GameLogic {
     }
 
     // Неизвестная команда
+    const maxNumbers = parseInt(process.env.MAX_NUMBERS) || 999;
     return {
-      text: 'Отправьте номер от 001 до 999 или "?" для просмотра недостающих номеров',
+      text: `Отправьте номер от 001 до ${String(maxNumbers).padStart(3, '0')} или "?" для просмотра недостающих номеров`,
       type: 'info'
     };
   }
 
   isValidNumberFormat(text) {
-    return /^\d{1,3}$/.test(text) && parseInt(text) >= 1 && parseInt(text) <= 999;
+    const maxNumbers = parseInt(process.env.MAX_NUMBERS) || 999;
+    return /^\d{1,3}$/.test(text) && parseInt(text) >= 1 && parseInt(text) <= maxNumbers;
   }
 
   async processNumberSubmission(number, userId, isBot = false) {
@@ -54,7 +56,8 @@ export class GameLogic {
       
       // Проверяем победу
       if (this.storage.isGameComplete()) {
-        response += '\n🎉 ПОБЕДА! 🎉\nВсе 999 номеров найдены!';
+        const maxNumbers = parseInt(process.env.MAX_NUMBERS) || 999;
+        response += `\n🎉 ПОБЕДА! 🎉\nВсе ${maxNumbers} номеров найдены!`;
       }
       
       // Сохраняем данные

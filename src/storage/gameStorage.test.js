@@ -323,5 +323,87 @@ describe('GameStorage', () => {
       expect(storage.hasNumber('03')).toBe(true);
       expect(storage.hasNumber('003')).toBe(true);
     });
+
+    test('should get last activity time', async () => {
+      const mockState = {
+        lastMessageTime: '2023-01-01T10:00:00.000Z',
+        lastUpdateId: 123,
+        lastActivity: '2023-01-01T10:05:00.000Z',
+        uptime: 300,
+        version: '1.0.0',
+        totalMessagesProcessed: 5
+      };
+
+      fs.readFile.mockResolvedValueOnce(JSON.stringify(mockState));
+
+      const lastActivity = await storage.getLastActivity();
+      expect(lastActivity).toBe('2023-01-01T10:00:00.000Z');
+      expect(fs.readFile).toHaveBeenCalled();
+    });
+
+    test('should get last update id', async () => {
+      const mockState = {
+        lastMessageTime: '2023-01-01T10:00:00.000Z',
+        lastUpdateId: 456,
+        lastActivity: '2023-01-01T10:05:00.000Z',
+        uptime: 300,
+        version: '1.0.0',
+        totalMessagesProcessed: 5
+      };
+
+      fs.readFile.mockResolvedValueOnce(JSON.stringify(mockState));
+
+      const lastUpdateId = await storage.getLastUpdateId();
+      expect(lastUpdateId).toBe(456);
+      expect(fs.readFile).toHaveBeenCalled();
+    });
+
+    test('should handle bot state methods when file does not exist', async () => {
+      // Мокаем ENOENT ошибку для getBotState
+      fs.readFile.mockRejectedValueOnce({ code: 'ENOENT' });
+
+      const defaultState = await storage.getBotState();
+      expect(defaultState).toEqual({
+        lastUpdateId: 0,
+        lastActivity: expect.any(String),
+        uptime: 0,
+        lastMessageTime: expect.any(String),
+        totalMessagesProcessed: 0
+      });
+
+      // Для getLastActivity и getLastUpdateId тоже должны работать
+      fs.readFile.mockRejectedValueOnce({ code: 'ENOENT' });
+      const lastActivity = await storage.getLastActivity();
+      expect(lastActivity).toBeDefined();
+
+      fs.readFile.mockRejectedValueOnce({ code: 'ENOENT' });
+      const lastUpdateId = await storage.getLastUpdateId();
+      expect(lastUpdateId).toBe(0);
+    });
+
+    test('should save and get bot state correctly', async () => {
+      const testState = {
+        lastUpdateId: 789,
+        lastMessageTime: '2023-01-01T12:00:00.000Z',
+        totalMessagesProcessed: 10
+      };
+
+      await storage.saveBotState(testState);
+      expect(fs.writeFile).toHaveBeenCalled();
+
+      // Проверяем, что можем прочитать сохраненное состояние
+      fs.readFile.mockResolvedValueOnce(JSON.stringify({
+        lastUpdateId: 789,
+        lastActivity: expect.any(String),
+        uptime: expect.any(Number),
+        lastMessageTime: '2023-01-01T12:00:00.000Z',
+        totalMessagesProcessed: 10
+      }));
+
+      const retrievedState = await storage.getBotState();
+      expect(retrievedState.lastUpdateId).toBe(789);
+      expect(retrievedState.lastMessageTime).toBe('2023-01-01T12:00:00.000Z');
+      expect(retrievedState.totalMessagesProcessed).toBe(10);
+    });
   });
 });

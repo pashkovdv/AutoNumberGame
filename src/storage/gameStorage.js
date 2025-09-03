@@ -98,7 +98,8 @@ export class GameStorage {
 
   isValidNumber(number) {
     const numStr = String(number);
-    return /^\d{1,3}$/.test(numStr) && parseInt(numStr) >= 1 && parseInt(numStr) <= 999;
+    const maxNumbers = parseInt(process.env.MAX_NUMBERS) || 999;
+    return /^\d{1,3}$/.test(numStr) && parseInt(numStr) >= 1 && parseInt(numStr) <= maxNumbers;
   }
 
   hasNumber(number) {
@@ -108,12 +109,14 @@ export class GameStorage {
   }
 
   getRemainingCount() {
-    return 999 - this.data.numbers.size;
+    const maxNumbers = parseInt(process.env.MAX_NUMBERS) || 999;
+    return maxNumbers - this.data.numbers.size;
   }
 
   getFirstTenMissingNumbers() {
     const missing = [];
-    for (let i = 1; i <= 999; i++) {
+    const maxNumbers = parseInt(process.env.MAX_NUMBERS) || 999;
+    for (let i = 1; i <= maxNumbers; i++) {
       if (!this.data.numbers.has(String(i).padStart(3, '0'))) {
         missing.push(String(i).padStart(3, '0'));
         if (missing.length >= 10) break;
@@ -123,7 +126,8 @@ export class GameStorage {
   }
 
   isGameComplete() {
-    return this.data.numbers.size >= 999;
+    const maxNumbers = parseInt(process.env.MAX_NUMBERS) || 999;
+    return this.data.numbers.size >= maxNumbers;
   }
 
   getStats() {
@@ -200,7 +204,6 @@ export class GameStorage {
       lastUpdateId: state.lastUpdateId || 0,
       lastActivity: new Date().toISOString(),
       uptime: process.uptime(),
-      version: process.env.npm_package_version || '1.0.0',
       lastMessageTime: state.lastMessageTime || new Date().toISOString(),
       totalMessagesProcessed: state.totalMessagesProcessed || 0
     };
@@ -216,11 +219,10 @@ export class GameStorage {
     } catch (error) {
       if (error.code === 'ENOENT') {
         // Если файл не существует, возвращаем начальное состояние
-        return { 
-          lastUpdateId: 0, 
+        return {
+          lastUpdateId: 0,
           lastActivity: new Date().toISOString(),
           uptime: 0,
-          version: '1.0.0',
           lastMessageTime: new Date().toISOString(),
           totalMessagesProcessed: 0
         };
