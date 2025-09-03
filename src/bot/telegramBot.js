@@ -1,6 +1,11 @@
 import TelegramBot from 'node-telegram-bot-api';
 import { GameLogic } from '../game/gameLogic.js';
 import { GameStorage } from '../storage/gameStorage.js';
+import fs from 'fs/promises';
+import path from 'path';
+import os from 'os';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
 
 export class TelegramGameBot {
   constructor(token, dataFilePath = null) {
@@ -8,6 +13,11 @@ export class TelegramGameBot {
     if (!dataFilePath) {
       dataFilePath = process.env.GAME_DATA_FILE || './data/game_data.json';
     }
+
+    // Кэшируем информацию о версии и ОС
+    this.version = null;
+    this.osInfo = null;
+    this.loadVersionAndOsInfo();
     this.bot = new TelegramBot(token, { 
       polling: true,
       polling_options: {
@@ -48,6 +58,29 @@ export class TelegramGameBot {
     } catch (error) {
       console.error('❌ Failed to initialize bot:', error);
       throw error;
+    }
+  }
+
+  async loadVersionAndOsInfo() {
+    try {
+      // Получаем путь к package.json
+      const __filename = fileURLToPath(import.meta.url);
+      const __dirname = dirname(__filename);
+      const packageJsonPath = path.join(__dirname, '..', 'package.json');
+
+      // Читаем package.json
+      const packageJson = JSON.parse(await fs.readFile(packageJsonPath, 'utf8'));
+      this.version = packageJson.version || 'unknown';
+
+      // Получаем информацию об ОС
+      const osType = os.type();
+      const osRelease = os.release();
+      this.osInfo = `${this.version} ${osType.toLowerCase()} ${osRelease}`;
+
+    } catch (error) {
+      console.warn('⚠️ Не удалось загрузить информацию о версии и ОС:', error.message);
+      this.version = 'unknown';
+      this.osInfo = 'unknown';
     }
   }
 
@@ -184,7 +217,7 @@ export class TelegramGameBot {
 
   async handleStatsCommand(msg) {
     const { from, chat } = msg;
-    
+
     // Проверяем, что команда не от бота
     if (from.is_bot) {
       console.log('🤖 Игнорируем команду /stats от бота');
@@ -194,9 +227,9 @@ export class TelegramGameBot {
     try {
       const stats = this.gameLogic.getGameStats();
       const userStats = await this.storage.getUserStatsWithUsernames(this.bot);
-      
+
       let statsMessage = stats.text + '\n\n';
-      
+
       if (userStats.length > 0) {
         statsMessage += '🏆 Топ игроков:\n';
         userStats.forEach((userStat, index) => {
@@ -206,7 +239,10 @@ export class TelegramGameBot {
       } else {
         statsMessage += '📝 Пока никто не нашел ни одного номера';
       }
-      
+
+      // Добавляем информацию о версии и ОС
+      statsMessage += `\n\nℹ️ Версия: ${this.osInfo}`;
+
       await this.sendMessage(chat.id, statsMessage);
     } catch (error) {
       console.error('❌ Ошибка получения статистики:', error);
