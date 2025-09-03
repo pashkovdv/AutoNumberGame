@@ -170,6 +170,20 @@ echo "📁 Создание директории для данных..."
 mkdir -p ~/autonumbergame/data
 chmod 755 ~/autonumbergame/data
 
+# Инициализация данных, если отсутствуют файлы в volume
+if [ ! -f ~/autonumbergame/data/game_data.json ]; then
+  echo "📝 Инициализация данных: копируем game_data.json из образа"
+  TMP_CID=$(docker create "$IMAGE_REPO")
+  docker cp "$TMP_CID":/app/data/game_data.json ~/autonumbergame/data/game_data.json || echo '{"numbers":[],"players":[],"lastUpdate":"'"$(date -Iseconds)"'"}' > ~/autonumbergame/data/game_data.json
+  if docker cp "$TMP_CID":/app/data/bot_state.json ~/autonumbergame/data/bot_state.json 2>/dev/null; then
+    true
+  else
+    echo '{"lastUpdateId":0,"lastActivity":"'"$(date -Iseconds)"'","uptime":0,"version":"1.0.0","lastMessageTime":"'"$(date -Iseconds)"'","totalMessagesProcessed":0}' > ~/autonumbergame/data/bot_state.json
+  fi
+  docker rm "$TMP_CID" >/dev/null
+  chmod 644 ~/autonumbergame/data/*.json || true
+fi
+
 # Останавливаем и удаляем старые контейнеры если есть
 echo "🛑 Остановка старых контейнеров (если есть)..."
 docker stop $CONTAINER_NAME $WATCHTOWER_NAME 2>/dev/null || true

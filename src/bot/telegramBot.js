@@ -63,24 +63,50 @@ export class TelegramGameBot {
 
   async loadVersionAndOsInfo() {
     try {
-      // Получаем путь к package.json
+      // Получаем путь к package.json (из корня проекта)
       const __filename = fileURLToPath(import.meta.url);
       const __dirname = dirname(__filename);
-      const packageJsonPath = path.join(__dirname, '..', 'package.json');
+      const packageJsonPath = path.join(__dirname, '..', '..', 'package.json');
 
-      // Читаем package.json
-      const packageJson = JSON.parse(await fs.readFile(packageJsonPath, 'utf8'));
-      this.version = packageJson.version || 'unknown';
+      // Версия приложения
+      let versionStr = 'vunknown';
+      try {
+        const packageJson = JSON.parse(await fs.readFile(packageJsonPath, 'utf8'));
+        if (packageJson.version) {
+          versionStr = `v${packageJson.version}`;
+        }
+      } catch {
+        if (process.env.npm_package_version) {
+          versionStr = `v${process.env.npm_package_version}`;
+        }
+      }
 
-      // Получаем информацию об ОС
-      const osType = os.type();
-      const osRelease = os.release();
-      this.osInfo = `${this.version} ${osType.toLowerCase()} ${osRelease}`;
+      // Информация об ОС (предпочтительно из /etc/os-release)
+      let distro = '';
+      try {
+        const osReleaseContent = await fs.readFile('/etc/os-release', 'utf8');
+        const nameMatch = osReleaseContent.match(/^NAME="?(.+?)"?$/m);
+        const verMatch = osReleaseContent.match(/^VERSION_ID="?(.+?)"?$/m);
+        if (nameMatch && verMatch) {
+          distro = `${nameMatch[1].toLowerCase()} ${verMatch[1]}`;
+        } else {
+          const osType = os.type();
+          const osRel = os.release();
+          distro = `${osType.toLowerCase()} ${osRel}`;
+        }
+      } catch {
+        const osType = os.type();
+        const osRel = os.release();
+        distro = `${osType.toLowerCase()} ${osRel}`;
+      }
+
+      this.version = versionStr;
+      this.osInfo = `${versionStr} ${distro}`;
 
     } catch (error) {
       console.warn('⚠️ Не удалось загрузить информацию о версии и ОС:', error.message);
-      this.version = 'unknown';
-      this.osInfo = 'unknown';
+      this.version = 'vunknown';
+      this.osInfo = 'vunknown unknown';
     }
   }
 
