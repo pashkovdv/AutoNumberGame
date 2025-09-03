@@ -2,7 +2,11 @@ import fs from 'fs/promises';
 import path from 'path';
 
 export class GameStorage {
-  constructor(dataFilePath = './data/game_data.json') {
+  constructor(dataFilePath = null) {
+    // Используем переменную окружения GAME_DATA_FILE или значение по умолчанию
+    if (!dataFilePath) {
+      dataFilePath = process.env.GAME_DATA_FILE || './data/game_data.json';
+    }
     this.dataFilePath = dataFilePath;
     this.data = {
       numbers: new Map(), // Map для хранения номер -> {number, userId, timestamp}

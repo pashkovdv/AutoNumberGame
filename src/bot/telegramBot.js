@@ -3,7 +3,11 @@ import { GameLogic } from '../game/gameLogic.js';
 import { GameStorage } from '../storage/gameStorage.js';
 
 export class TelegramGameBot {
-  constructor(token, dataFilePath = './data/game_data.json') {
+  constructor(token, dataFilePath = null) {
+    // Используем переменную окружения GAME_DATA_FILE или значение по умолчанию
+    if (!dataFilePath) {
+      dataFilePath = process.env.GAME_DATA_FILE || './data/game_data.json';
+    }
     this.bot = new TelegramBot(token, { 
       polling: true,
       polling_options: {
