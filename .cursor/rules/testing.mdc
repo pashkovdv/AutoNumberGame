@@ -414,6 +414,45 @@ describe('Isolated Tests', () => {
 - Стремимся к 100% покрытию критических путей
 - Фокусируемся на бизнес-логике
 - Не тестируем тривиальный код
+
+## Форматы отчетов о покрытии
+
+### LCOV (.lcov.info)
+**Используется в CI/CD:**
+```yaml
+- name: Upload coverage to Codecov
+  uses: codecov/codecov-action@v3
+  with:
+    file: ./coverage/lcov.info
+    flags: unittests
+    name: codecov-umbrella
+    fail_ci_if_error: false
+```
+
+**Особенности:**
+- Стандартный формат для Codecov
+- Поддерживает flags для группировки
+- Оптимален для CI/CD пайплайнов
+
+### JSON (.coverage-final.json)
+**Используется для локального анализа:**
+```javascript
+// В vitest.config.js
+coverage: {
+  reporter: ['text', 'json', 'html']
+}
+```
+
+**Особенности:**
+- Подробные данные для анализа
+- Используется IDE и локальными инструментами
+- Содержит больше метаданных
+
+### HTML отчет (.coverage/index.html)
+**Используется для визуального анализа:**
+- Человеко-читаемый формат
+- Показывает покрытие по строкам
+- Удобен для локальной разработки
 description:
 globs:
 alwaysApply: true

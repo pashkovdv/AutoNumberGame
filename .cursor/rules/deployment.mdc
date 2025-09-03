@@ -142,34 +142,42 @@ on:
     branches: [ main ]
 
 env:
-  NODE_VERSION: '22'
-  DOCKER_IMAGE: autonumbergame
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   test:
     runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [22.x]
+
     steps:
-      - uses: actions/checkout@v4
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-      
-      - name: Install dependencies
-        run: npm ci
-      
-      - name: Run linting
-        run: npm run lint
-      
-      - name: Run tests with coverage
-        run: npm run test:coverage
-      
-      - name: Upload coverage reports
-        uses: codecov/codecov-action@v3
-        with:
-          file: ./coverage/coverage-final.json
+    - uses: actions/checkout@v4
+
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm ci
+
+    - name: Run linter
+      run: npm run lint
+
+    - name: Run tests
+      run: npm run test:coverage
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage/lcov.info
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
 
   build:
     needs: test
@@ -181,20 +189,21 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       
-      - name: Login to Docker Hub
+      - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-      
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build and push Docker image
-        uses: docker/build-push-action@v4
+        uses: docker/build-push-action@v5
         with:
           context: .
           push: true
           tags: |
-            ${{ secrets.DOCKER_USERNAME }}/autonumbergame:latest
-            ${{ secrets.DOCKER_USERNAME }}/autonumbergame:${{ github.sha }}
+            ghcr.io/${{ github.repository }}:latest
+            ghcr.io/${{ github.repository }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -203,20 +212,29 @@ jobs:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     steps:
-      - name: Deploy to production
-        run: |
-          echo "Deployment to production completed"
-          # Здесь может быть развертывание на сервер
+    - name: Deployment notification
+      run: |
+        echo "✅ Docker image built and pushed successfully!"
+        echo "📦 Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+        echo "🔗 SHA: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+        echo ""
+        echo "🖥️  Windows Server 2022 with Watchtower will auto-update"
+        echo ""
+        echo "Manual deployment:"
+        echo "1. Login: docker login ${{ env.REGISTRY }} -u USERNAME -p GITHUB_TOKEN"
+        echo "2. Pull: docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+        echo "3. Run: docker-compose up -d"
 ```
 
 ### Переменные окружения
 
 #### GitHub Secrets
-- `DOCKER_USERNAME` - имя пользователя Docker Hub
-- `DOCKER_PASSWORD` - пароль Docker Hub
+- `GITHUB_TOKEN` - автоматически предоставляется GitHub (для GitHub Container Registry)
 - `TELEGRAM_BOT_TOKEN` - токен Telegram бота
-- `DEPLOY_SSH_KEY` - SSH ключ для развертывания
-- `DEPLOY_HOST` - хост для развертывания
+
+#### Переменные окружения CI/CD
+- `REGISTRY: ghcr.io` - GitHub Container Registry
+- `IMAGE_NAME: ${{ github.repository }}` - имя образа на основе репозитория
 
 ## Развертывание
 
