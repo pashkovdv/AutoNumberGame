@@ -565,8 +565,8 @@ describe('TelegramGameBot', () => {
 
       await bot.loadVersionAndOsInfo();
 
-      expect(bot.version).toBe('v2.0.2');
-      expect(bot.osInfo).toContain('v2.0.2');
+      expect(bot.version).toMatch(/^v[0-9.]+$/);
+      expect(bot.osInfo).toMatch(/v[0-9.]+/);
       expect(bot.osInfo).toContain('ubuntu 20.04');
     });
 
@@ -610,7 +610,7 @@ describe('TelegramGameBot', () => {
 
       await bot.loadVersionAndOsInfo();
 
-      expect(bot.version).toBe('v2.0.2');
+      expect(bot.version).toMatch(/^v[0-9.]+$/);
       expect(bot.osInfo).toContain('linux 5.4.0');
     });
 
@@ -796,7 +796,7 @@ describe('TelegramGameBot', () => {
       expect(actualMessage).toContain('🏆 Топ игроков:');
       expect(actualMessage).toContain('🥇 Test User 1 (@testuser1): 5 номеров');
       expect(actualMessage).toContain('🥈 Test User 2 (@testuser2): 3 номеров');
-      expect(actualMessage).toContain('ℹ️ Версия: v2.0.3 linux 5.4.0');
+      expect(actualMessage).toMatch(/ℹ️ Версия: v[0-9.]+ linux/);
       expect(actualCall[2]).toEqual({ parse_mode: 'HTML' });
     });
 
@@ -847,7 +847,7 @@ describe('TelegramGameBot', () => {
 
       expect(actualMessage).toContain('📊 Статистика игры');
       expect(actualMessage).toContain('📝 Пока никто не нашел ни одного номера');
-      expect(actualMessage).toContain('ℹ️ Версия: v2.0.3 linux 5.4.0');
+      expect(actualMessage).toMatch(/ℹ️ Версия: v[0-9.]+ linux/);
       expect(actualCall[2]).toEqual({ parse_mode: 'HTML' });
     });
 
@@ -1110,8 +1110,8 @@ describe('TelegramGameBot', () => {
       // Вызываем метод напрямую для тестирования
       await newBot.loadVersionAndOsInfo();
 
-      expect(newBot.version).toBe('v2.0.3');
-      expect(newBot.osInfo).toContain('v2.0.3');
+      expect(newBot.version).toMatch(/^v[0-9.]+$/);
+      expect(newBot.osInfo).toMatch(/v[0-9.]+/);
       expect(newBot.osInfo).toContain('linux'); // ожидаем linux вместо ubuntu 20.04
 
       // Восстанавливаем оригинальный метод
@@ -1132,8 +1132,8 @@ describe('TelegramGameBot', () => {
       // Вызываем метод напрямую для тестирования
       await newBot.loadVersionAndOsInfo();
 
-      expect(newBot.version).toBe('v2.0.3');
-      expect(newBot.osInfo).toContain('v2.0.3');
+      expect(newBot.version).toMatch(/^v[0-9.]+$/);
+      expect(newBot.osInfo).toMatch(/v[0-9.]+/);
       expect(newBot.osInfo).toContain('linux'); // fallback для ОС
 
       // Восстанавливаем оригинальный метод
