@@ -105,6 +105,62 @@ describe('GameLogic', () => {
       
       expect(result.type).toBe('missing_numbers');
     });
+
+    test('should handle duplicate number via processMessage path', async () => {
+      mockStorage.hasNumber.mockReturnValue(true);
+
+      const result = await gameLogic.processMessage('123', 'user123');
+
+      expect(result.type).toBe('duplicate');
+      expect(result.text).toBe('уже есть');
+    });
+
+    test('should delete own number with -xxx', async () => {
+      mockStorage.removeNumber = vi.fn().mockReturnValue({ wasRemoved: true, remaining: 990 });
+      mockStorage.saveData.mockResolvedValue();
+
+      const result = await gameLogic.processMessage('-123', 'user123');
+
+      expect(mockStorage.removeNumber).toHaveBeenCalledWith('123', 'user123');
+      expect(mockStorage.saveData).toHaveBeenCalled();
+      expect(result.type).toBe('delete_success');
+      expect(result.text).toContain('удалено');
+      expect(result.text).toContain('Осталось 990 номеров');
+    });
+
+    test('should say not found on delete when number missing', async () => {
+      mockStorage.removeNumber = vi.fn().mockReturnValue({ wasRemoved: false, error: 'Number not found' });
+
+      const result = await gameLogic.processMessage('-7', 'user123');
+
+      expect(result.type).toBe('not_found');
+      expect(result.text).toBe('номер не найден');
+    });
+
+    test('should forbid delete when not owner', async () => {
+      mockStorage.removeNumber = vi.fn().mockReturnValue({ wasRemoved: false, error: 'Forbidden: not owner' });
+
+      const result = await gameLogic.processMessage('-42', 'user123');
+
+      expect(result.type).toBe('forbidden');
+      expect(result.text).toBe('это не ваш номер');
+    });
+
+    test('should handle invalid delete format out of range', async () => {
+      const result = await gameLogic.processMessage('-1000', 'user123');
+      expect(result.type).toBe('error');
+      expect(result.text).toBe('Неверный формат номера для удаления');
+    });
+
+    test('should handle delete with other error from removeNumber', async () => {
+      mockStorage.removeNumber = vi.fn().mockReturnValue({ wasRemoved: false, error: 'Some other error' });
+      mockStorage.saveData.mockResolvedValue();
+
+      const result = await gameLogic.processMessage('-123', 'user123');
+
+      expect(result.type).toBe('error');
+      expect(result.text).toBe('Ошибка при удалении номера');
+    });
   });
 
   describe('processNumberSubmission', () => {
@@ -162,6 +218,19 @@ describe('GameLogic', () => {
       
       expect(result.type).toBe('error');
       expect(result.text).toBe('Ошибка при добавлении номера');
+    });
+
+    test('should not add player when called as bot (isBot=true)', async () => {
+      mockStorage.hasNumber.mockReturnValue(false);
+      mockStorage.addNumber.mockReturnValue({ wasAdded: true, remaining: 998 });
+      mockStorage.isGameComplete.mockReturnValue(false);
+      mockStorage.saveData.mockResolvedValue();
+
+      const result = await gameLogic.processNumberSubmission('123', 'bot123', true);
+
+      expect(result.type).toBe('success');
+      // user не должен быть добавлен в players, так как isBot=true
+      expect(mockStorage.data.players.has('bot123')).toBe(false);
     });
   });
 

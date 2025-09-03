@@ -107,6 +107,17 @@ describe('GameStorage', () => {
       expect(storage.isValidNumber('12a')).toBe(false);
       expect(storage.isValidNumber('')).toBe(false);
     });
+
+    test('should respect MAX_NUMBERS env var boundary', () => {
+      const original = process.env.MAX_NUMBERS;
+      process.env.MAX_NUMBERS = '10';
+      expect(storage.isValidNumber('10')).toBe(true);
+      expect(storage.isValidNumber('11')).toBe(false);
+      // также проверяем нижнюю границу и формат
+      expect(storage.isValidNumber('0')).toBe(false);
+      expect(storage.isValidNumber('001')).toBe(true);
+      if (original) process.env.MAX_NUMBERS = original; else delete process.env.MAX_NUMBERS;
+    });
   });
 
   describe('addNumber', () => {
@@ -322,6 +333,32 @@ describe('GameStorage', () => {
       expect(storage.hasNumber('3')).toBe(true);
       expect(storage.hasNumber('03')).toBe(true);
       expect(storage.hasNumber('003')).toBe(true);
+    });
+
+    test('removeNumber should remove own number successfully', () => {
+      storage.addNumber('123', 'user123');
+      const res = storage.removeNumber('123', 'user123');
+      expect(res.wasRemoved).toBe(true);
+      expect(storage.hasNumber('123')).toBe(false);
+    });
+
+    test('removeNumber should forbid removing others number', () => {
+      storage.addNumber('123', 'owner');
+      const res = storage.removeNumber('123', 'other');
+      expect(res.wasRemoved).toBe(false);
+      expect(res.error).toBe('Forbidden: not owner');
+    });
+
+    test('removeNumber should return not found for absent number', () => {
+      const res = storage.removeNumber('999', 'user');
+      expect(res.wasRemoved).toBe(false);
+      expect(res.error).toBe('Number not found');
+    });
+
+    test('removeNumber should handle invalid number format', () => {
+      const res = storage.removeNumber('abc', 'user');
+      expect(res.wasRemoved).toBe(false);
+      expect(res.error).toBe('Invalid number format');
     });
 
     test('should get last activity time', async () => {

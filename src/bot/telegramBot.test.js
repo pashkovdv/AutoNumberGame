@@ -211,6 +211,24 @@ describe('TelegramGameBot', () => {
       );
     });
 
+    test('should handle start when username missing (fallback)', async () => {
+      const mockMsg = {
+        chat: { id: 12345, type: 'private' },
+        from: { id: 67890, is_bot: false }
+      };
+
+      mockTelegramBot.sendMessage.mockResolvedValue();
+
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      await bot.handleStartCommand(mockMsg);
+
+      // Проверяем, что лог содержит подставленный username
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Username=username'));
+
+      consoleSpy.mockRestore();
+    });
+
     test('should ignore command from bot', async () => {
       const mockMsg = {
         chat: { id: 12345, type: 'private' },
@@ -782,6 +800,33 @@ describe('TelegramGameBot', () => {
       expect(actualCall[2]).toEqual({ parse_mode: 'HTML' });
     });
 
+    test('should assign medals for indexes 0,1,2 and default for others', async () => {
+      const mockMsg = {
+        chat: { id: 12345 },
+        from: { id: 67890, is_bot: false, username: 'user' }
+      };
+
+      const mockStats = { text: '📊 Статистика игры' };
+      const mockUserStats = [
+        { userId: 'u1', username: 'u1', displayName: 'U1', count: 10 },
+        { userId: 'u2', username: 'u2', displayName: 'U2', count: 9 },
+        { userId: 'u3', username: 'u3', displayName: 'U3', count: 8 },
+        { userId: 'u4', username: 'u4', displayName: 'U4', count: 1 }
+      ];
+
+      mockGameLogic.getGameStats.mockReturnValue(mockStats);
+      mockStorage.getUserStatsWithUsernames = vi.fn().mockResolvedValue(mockUserStats);
+      mockTelegramBot.sendMessage.mockResolvedValue();
+
+      await bot.handleStatsCommand(mockMsg);
+
+      const actualMessage = mockTelegramBot.sendMessage.mock.calls[0][1];
+      expect(actualMessage).toContain('🥇 U1 (@u1): 10 номеров');
+      expect(actualMessage).toContain('🥈 U2 (@u2): 9 номеров');
+      expect(actualMessage).toContain('🥉 U3 (@u3): 8 номеров');
+      expect(actualMessage).toContain('🎯 U4 (@u4): 1 номеров');
+    });
+
     test('should handle stats command with no user stats', async () => {
       const mockMsg = {
         chat: { id: 12345 },
@@ -964,6 +1009,70 @@ describe('TelegramGameBot', () => {
       }
     });
 
+    test('should include isRunning status in botstats message (Остановлен)', async () => {
+      const originalEnv = process.env.NODE_ENV;
+      process.env.NODE_ENV = 'development';
+
+      const mockMsg = {
+        chat: { id: 12345 },
+        from: { id: 67890, is_bot: false, username: 'admin' }
+      };
+
+      const originalGetBotStats = bot.getBotStats;
+      bot.getBotStats = vi.fn().mockResolvedValueOnce({
+        bot: {
+          lastUpdateId: 0,
+          lastActivity: new Date().toISOString(),
+          uptime: 0,
+          totalMessagesProcessed: 0,
+          isRunning: false
+        },
+        game: { totalNumbers: 0, remaining: 999, players: 0, lastUpdate: new Date().toISOString() }
+      });
+
+      mockTelegramBot.sendMessage.mockResolvedValue();
+
+      await bot.handleBotStatsCommand(mockMsg);
+
+      const message = mockTelegramBot.sendMessage.mock.calls[0][1];
+      expect(message).toContain('Статус: Остановлен');
+
+      bot.getBotStats = originalGetBotStats;
+      process.env.NODE_ENV = originalEnv;
+    });
+
+    test('should include isRunning status in botstats message (Работает)', async () => {
+      const originalEnv = process.env.NODE_ENV;
+      process.env.NODE_ENV = 'development';
+
+      const mockMsg = {
+        chat: { id: 12345 },
+        from: { id: 67890, is_bot: false, username: 'admin' }
+      };
+
+      const originalGetBotStats = bot.getBotStats;
+      bot.getBotStats = vi.fn().mockResolvedValueOnce({
+        bot: {
+          lastUpdateId: 0,
+          lastActivity: new Date().toISOString(),
+          uptime: 0,
+          totalMessagesProcessed: 0,
+          isRunning: true
+        },
+        game: { totalNumbers: 0, remaining: 999, players: 0, lastUpdate: new Date().toISOString() }
+      });
+
+      mockTelegramBot.sendMessage.mockResolvedValue();
+
+      await bot.handleBotStatsCommand(mockMsg);
+
+      const message = mockTelegramBot.sendMessage.mock.calls[0][1];
+      expect(message).toContain('Статус: Работает');
+
+      bot.getBotStats = originalGetBotStats;
+      process.env.NODE_ENV = originalEnv;
+    });
+
     test('should initialize version and OS info in constructor', () => {
       // Проверяем, что версия была инициализирована
       expect(bot.version).toBeDefined();
@@ -1075,6 +1184,27 @@ describe('TelegramGameBot', () => {
 
       expect(mockGameLogic.processMessage).toHaveBeenCalledWith('Hello world', '67890');
       expect(mockTelegramBot.sendMessage).toHaveBeenCalledWith(12345, 'Response', { parse_mode: 'HTML' });
+    });
+
+    test('should handle message event when username is missing', async () => {
+      const mockMsg = {
+        text: 'Hello world',
+        chat: { id: 12345 },
+        from: { id: 67890, is_bot: false }
+      };
+
+      mockGameLogic.processMessage.mockResolvedValue({ text: 'Resp', type: 'success' });
+      mockTelegramBot.sendMessage.mockResolvedValue();
+
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      const messageHandler = mockTelegramBot.on.mock.calls.find(call => call[0] === 'message')[1];
+      await messageHandler(mockMsg);
+
+      // Проверяем, что попали в ветку с fallback на 'без username'
+      expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Username=без username'));
+
+      consoleSpy.mockRestore();
     });
 
     test('should handle reset command logging', async () => {

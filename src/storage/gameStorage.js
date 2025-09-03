@@ -96,6 +96,25 @@ export class GameStorage {
     return { wasAdded: false, error: 'Invalid number format' };
   }
 
+  // Удаление номера. Разрешено только если номер принадлежит этому userId
+  removeNumber(number, userId) {
+    const num = parseInt(number);
+    if (Number.isNaN(num)) {
+      return { wasRemoved: false, error: 'Invalid number format' };
+    }
+    const normalizedNumber = String(num).padStart(3, '0');
+    const entry = this.data.numbers.get(normalizedNumber);
+    if (!entry) {
+      return { wasRemoved: false, error: 'Number not found' };
+    }
+    if (entry.userId !== userId) {
+      return { wasRemoved: false, error: 'Forbidden: not owner' };
+    }
+    this.data.numbers.delete(normalizedNumber);
+    this.data.lastUpdate = new Date().toISOString();
+    return { wasRemoved: true, remaining: this.getRemainingCount() };
+  }
+
   isValidNumber(number) {
     const numStr = String(number);
     const maxNumbers = parseInt(process.env.MAX_NUMBERS) || 999;

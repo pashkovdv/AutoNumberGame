@@ -11,6 +11,33 @@ export class GameLogic {
       return this.getMissingNumbersResponse();
     }
 
+    // Обработка удаления: -<число> (любой длины), далее проверяем диапазон
+    if (/^-\d+$/.test(text)) {
+      const numberToRemove = text.slice(1);
+      const maxNumbers = parseInt(process.env.MAX_NUMBERS) || 999;
+      const numVal = parseInt(numberToRemove);
+      if (!(numVal >= 1 && numVal <= maxNumbers)) {
+        return { text: 'Неверный формат номера для удаления', type: 'error' };
+      }
+      const result = this.storage.removeNumber(numberToRemove, userId);
+      if (result.wasRemoved) {
+        // сохраняем изменения
+        await this.storage.saveData();
+        let response = 'удалено';
+        if (result.remaining % 10 === 0) {
+          response += `\nОсталось ${result.remaining} номеров`;
+        }
+        return { text: response, type: 'delete_success' };
+      }
+      if (result.error === 'Number not found') {
+        return { text: 'номер не найден', type: 'not_found' };
+      }
+      if (result.error === 'Forbidden: not owner') {
+        return { text: 'это не ваш номер', type: 'forbidden' };
+      }
+      return { text: 'Ошибка при удалении номера', type: 'error' };
+    }
+
     // Обработка номера
     if (this.isValidNumberFormat(text)) {
       return await this.processNumberSubmission(text, userId, false);
